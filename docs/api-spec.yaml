@@ -1,0 +1,750 @@
+openapi: 3.0.3
+info:
+  title: LMS-AI Core Service API
+  version: 0.1.0
+  description: >
+    Core LMS REST API (Vertexon LMS-AI). Base path /api/v1. All endpoints
+    except /auth/* and the public catalog require Authorization: Bearer <JWT>.
+    Errors follow { error: { code, message, field? } }.
+servers:
+  - url: http://localhost:4000/api/v1
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+  - name: courses
+  - name: enrollments
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      security: []
+      summary: Register a new user (default role: student)
+      rateLimit: 10/min/IP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, email, password]
+              properties:
+                full_name: { type: string, minLength: 2, maxLength: 150 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                role: { type: string, enum: [student, instructor] }
+      responses:
+        '201':
+          description: Auth payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Login, returns access + refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Auth payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Account suspended }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      security: []
+      summary: Rotate refresh token, issue new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      security: []
+      summary: Invalidate the presented refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: '{ ok: true }' }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Current authenticated user profile
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /courses:
+    get:
+      tags: [courses]
+      security: []
+      summary: Public catalog — filter/search/paginate
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Search title/description }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: difficulty, in: query, schema: { type: string, enum: [beginner, intermediate, advanced] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 12 } }
+      responses:
+        '200':
+          description: Paginated course list (Redis-cached, 5 min TTL)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Course' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      tags: [courses]
+      summary: Create a course (status defaults to pending)
+      description: Requires role instructor or admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseInput' }
+      responses:
+        '201':
+          description: Created course
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /courses/{id}:
+    get:
+      tags: [courses]
+      security: []
+      summary: Course detail with modules and lectures
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      responses:
+        '200':
+          description: Course with nested modules/lectures
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [courses]
+      summary: Update course metadata (owner or admin)
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseInput' }
+      responses:
+        '200': { description: Updated course }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /courses/{id}/modules:
+    post:
+      tags: [courses]
+      summary: Add a module (owner or admin)
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                order_index: { type: integer }
+      responses:
+        '201': { description: Created module }
+
+  /modules/{id}/lectures:
+    post:
+      tags: [courses]
+      summary: Add a lecture (owner or admin; multipart upload in Phase 2)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                video_url: { type: string }
+                transcript: { type: string }
+                duration_seconds: { type: integer }
+                order_index: { type: integer }
+                resource_urls: { type: array, items: { type: string } }
+      responses:
+        '201': { description: Created lecture }
+
+  /courses/{id}/approve:
+    post:
+      tags: [courses]
+      summary: Approve/reject a submitted course (admin only, FR-AD1)
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                comment: { type: string }
+      responses:
+        '200': { description: Updated course }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /courses/{id}/enroll:
+    post:
+      tags: [enrollments]
+      summary: Enroll current student (course must be approved)
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      responses:
+        '201': { description: Enrollment record }
+        '403': { description: Course not open / wrong role }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /enrollments/me:
+    get:
+      tags: [enrollments]
+      summary: My enrolled courses with progress
+      responses:
+        '200':
+          description: Enrollment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        course_id: { type: string, format: uuid }
+                        title: { type: string }
+                        progress_percent: { type: number }
+
+  # ---- Phase 2: learning core --------------------------------------------
+  /lectures/{id}/progress:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [progress]
+      summary: My watched-seconds / completion for a lecture
+      responses:
+        '200': { description: Progress record }
+    post:
+      tags: [progress]
+      summary: Update watched-seconds (recomputes enrollment %, queues certificate at 100%)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [watched_seconds]
+              properties:
+                watched_seconds: { type: integer, minimum: 0 }
+                completed: { type: boolean }
+      responses:
+        '200': { description: Updated progress + enrollment percent }
+        '403': { description: Not enrolled }
+
+  /lectures/{id}/notes:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [progress]
+      summary: List my timestamped notes
+      responses:
+        '200': { description: Notes }
+    post:
+      tags: [progress]
+      summary: Add a timestamped note (FR-S5)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timestamp_seconds, content]
+              properties:
+                timestamp_seconds: { type: integer }
+                content: { type: string }
+      responses:
+        '201': { description: Created note }
+
+  /lectures/{id}/bookmarks:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [progress]
+      summary: List my bookmarks
+      responses:
+        '200': { description: Bookmarks }
+    post:
+      tags: [progress]
+      summary: Bookmark a timestamp (FR-S5)
+      responses:
+        '201': { description: Created bookmark }
+
+  /quizzes:
+    post:
+      tags: [quizzes]
+      summary: Create a quiz manually (instructor, FR-S7)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuizInput' }
+      responses:
+        '201': { description: Created quiz }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /quizzes/{id}:
+    get:
+      tags: [quizzes]
+      summary: Quiz with questions — answer keys only for staff
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Quiz }
+
+  /quizzes/{id}/attempt:
+    post:
+      tags: [quizzes]
+      summary: Start (or resume) an attempt — enrolled students only
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: Attempt }
+        '403': { description: Not enrolled }
+
+  /attempts/{id}/submit:
+    post:
+      tags: [quizzes]
+      summary: Submit answers, receive auto-graded score (one-shot, 409 on replay)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      question_id: { type: string, format: uuid }
+                      selected_option_ids: { type: array, items: { type: string, format: uuid } }
+                      text_answer: { type: string }
+      responses:
+        '200': { description: Score + per-question results }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /assignments:
+    post:
+      tags: [assignments]
+      summary: Create assignment with rubric + deadline (instructor, FR-I3)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [course_id, title]
+              properties:
+                course_id: { type: string, format: uuid }
+                title: { type: string }
+                instructions: { type: string }
+                due_date: { type: string, format: date-time }
+      responses:
+        '201': { description: Created assignment }
+
+  /assignments/{id}/submit:
+    post:
+      tags: [assignments]
+      summary: Submit a file before the deadline (student, multipart field `file`, FR-S6)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: Submission }
+        '403': { description: Late or not enrolled }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /submissions/{id}/grade:
+    put:
+      tags: [assignments]
+      summary: Grade a submission (instructor)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grade]
+              properties:
+                grade: { type: number, minimum: 0, maximum: 100 }
+                feedback: { type: string }
+      responses:
+        '200': { description: Graded submission }
+
+  /courses/{id}/assignments:
+    get:
+      tags: [assignments]
+      summary: List course assignments with my submission status
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      responses:
+        '200': { description: Assignments }
+        '403': { description: Not enrolled }
+
+  /users/me/streak:
+    get:
+      tags: [gamification]
+      summary: Current + longest streak (FR-S9)
+      responses:
+        '200': { description: Streak }
+
+  /users/me/badges:
+    get:
+      tags: [gamification]
+      summary: Earned badges
+      responses:
+        '200': { description: Badges }
+
+  /users/me/certificates:
+    get:
+      tags: [gamification]
+      summary: My certificates (FR-S8)
+      responses:
+        '200': { description: Certificates }
+
+  /certificates/{id}/download:
+    get:
+      tags: [gamification]
+      summary: Download certificate PDF (owner or admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: PDF file }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /leaderboard/{courseId}:
+    get:
+      tags: [gamification]
+      summary: Course leaderboard by progress + quiz score (Redis-cached 60s)
+      parameters: [{ $ref: '#/components/parameters/courseId' }]
+      responses:
+        '200': { description: Ranked participants }
+
+  # ---- Phase 3: AI tutor (proxied to the FastAPI ai-service) -------------
+  /ai/chat/sessions:
+    post:
+      tags: [ai]
+      summary: Start a course-scoped chat session (FR-A1)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [course_id]
+              properties:
+                course_id: { type: string, format: uuid }
+      responses:
+        '201': { description: Session }
+    get:
+      tags: [ai]
+      summary: My chat sessions (optionally filtered by course_id)
+      responses:
+        '200': { description: Sessions }
+
+  /ai/chat/sessions/{id}/messages:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      tags: [ai]
+      summary: Chat history with source citations
+      responses:
+        '200': { description: Messages }
+    post:
+      tags: [ai]
+      summary: Send a message — RAG-grounded reply with citations (FR-A2), 20/min/user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+      responses:
+        '200':
+          description: Grounded reply
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { type: string }
+                  mode: { type: string, enum: [beginner, intermediate, advanced] }
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        lecture_id: { type: string, format: uuid }
+                        lecture_title: { type: string }
+                        timestamp_seconds: { type: integer, nullable: true }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /ai/chat/sessions/{id}/mode:
+    put:
+      tags: [ai]
+      summary: Switch explanation depth (FR-A6)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode: { type: string, enum: [beginner, intermediate, advanced] }
+      responses:
+        '200': { description: Updated mode }
+
+  /ai/lectures/{id}/summarize:
+    post:
+      tags: [ai]
+      summary: Key-point summary of a lecture transcript (FR-A3)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Summary }
+        '400': { description: No transcript }
+
+  /ai/lectures/{id}/generate-quiz:
+    post:
+      tags: [ai]
+      summary: Draft a 5-10 question quiz from the transcript for instructor review (FR-A5)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Created draft quiz id + question count }
+
+  /ai/modules/{id}/flashcards:
+    post:
+      tags: [ai]
+      summary: Generate Q/A flashcards for a module (FR-A7)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Cards }
+
+  /ai/study-plan:
+    post:
+      tags: [ai]
+      summary: Personalized study plan from quiz score history (FR-A4)
+      responses:
+        '200': { description: Plan }
+        '404': { description: No enrolled courses }
+
+  /ai/recommendations:
+    get:
+      tags: [ai]
+      summary: Personalized course recommendations — quiz performance + embedding similarity (FR-S10)
+      responses:
+        '200': { description: Ranked recommendations with reasons }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    courseId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthorized:
+      description: Missing/invalid/expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Insufficient role or ownership
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Duplicate resource / state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Rate limit exceeded (auth 10/min/IP, ai chat 20/min/user, other 100/min/user)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            field: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        avatar_url: { type: string, nullable: true }
+        role: { type: string, enum: [student, instructor, admin] }
+        roles: { type: array, items: { type: string } }
+    AuthResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    CourseInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 200 }
+        description: { type: string }
+        category: { type: string }
+        difficulty: { type: string, enum: [beginner, intermediate, advanced] }
+        thumbnail_url: { type: string }
+        price: { type: number, minimum: 0 }
+    Course:
+      allOf:
+        - $ref: '#/components/schemas/CourseInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [pending, approved, rejected, archived] }
+            created_at: { type: string, format: date-time }
+            instructor_name: { type: string }
+            enrollment_count: { type: integer }
+    CourseDetail:
+      allOf:
+        - $ref: '#/components/schemas/Course'
+        - type: object
+          properties:
+            modules:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  title: { type: string }
+                  order_index: { type: integer }
+                  lectures:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        video_url: { type: string, nullable: true }
+                        duration_seconds: { type: integer, nullable: true }
+                  quizzes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        question_count: { type: integer }
+            assignments:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  title: { type: string }
+                  due_date: { type: string, format: date-time, nullable: true }
+    QuizInput:
+      type: object
+      required: [module_id, title, questions]
+      properties:
+        module_id: { type: string, format: uuid }
+        title: { type: string }
+        is_ai_generated: { type: boolean }
+        questions:
+          type: array
+          items:
+            type: object
+            required: [question_text, question_type, options]
+            properties:
+              question_text: { type: string }
+              question_type: { type: string, enum: [mcq, multi_select, short_answer] }
+              options:
+                type: array
+                items:
+                  type: object
+                  required: [option_text]
+                  properties:
+                    option_text: { type: string }
+                    is_correct: { type: boolean }
