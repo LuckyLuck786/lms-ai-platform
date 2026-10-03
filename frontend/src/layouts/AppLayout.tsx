@@ -3,6 +3,7 @@ import { clearAuth } from '../store/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import ThemeToggle from '../components/common/ThemeToggle';
 import NotificationBell from '../components/common/NotificationBell';
+import DemoBanner from '../components/common/DemoBanner';
 import { useI18n, Locale } from '../utils/i18n';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -89,6 +90,7 @@ export default function AppLayout() {
           </div>
         </div>
       </header>
+      <DemoBanner />
       <main id="main-content" className="mx-auto max-w-6xl px-4 py-8">
         <Outlet />
       </main>

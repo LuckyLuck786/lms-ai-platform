@@ -2,10 +2,21 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { store } from '../store/store';
 import { clearAuth, setAuth } from '../store/authSlice';
 import { ApiErrorBody, AuthResponse } from '../utils/types';
+import { demoAdapter, isDemoMode } from './demo';
+
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
+
+/** True when no backend is configured and API calls are served from the browser. */
+export const DEMO_MODE = isDemoMode();
+
+// The default instance also gets the demo adapter so the token-refresh call
+// below — which intentionally bypasses the shared interceptors — stays offline.
+if (DEMO_MODE) axios.defaults.adapter = demoAdapter;
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  baseURL: API_BASE_URL,
   timeout: 20_000,
+  adapter: DEMO_MODE ? demoAdapter : undefined,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -46,7 +57,7 @@ api.interceptors.response.use(
         refreshing =
           refreshing ??
           axios
-            .post<AuthResponse>('/api/v1/auth/refresh', { refresh_token: refreshToken })
+            .post<AuthResponse>(`${API_BASE_URL}/auth/refresh`, { refresh_token: refreshToken })
             .then((r) => r.data)
             .finally(() => {
               refreshing = null;

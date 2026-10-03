@@ -87,6 +87,7 @@ export interface LectureProgress {
 
 export interface Note {
   id: string;
+  lecture_id: string;
   timestamp_seconds: number;
   content: string;
   created_at: string;
@@ -191,6 +192,7 @@ export interface PendingCourse extends Course {
 
 export interface DiscussionThread {
   id: string;
+  course_id: string;
   title: string;
   created_at: string;
   created_by_name: string;
@@ -205,10 +207,12 @@ export interface DiscussionPost {
   created_at: string;
   author_name: string;
   author_id: string;
+  user_id: string;
 }
 
 export interface Announcement {
   id: string;
+  course_id: string;
   content: string;
   created_at: string;
   posted_by_name: string;

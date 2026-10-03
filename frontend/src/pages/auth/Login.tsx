@@ -6,6 +6,8 @@ import { setAuth } from '../../store/authSlice';
 import { useAppDispatch } from '../../store/hooks';
 import { AuthResponse } from '../../utils/types';
 import { Alert, Card } from '../../components/common/ui';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../services/demo';
+import { DEMO_MODE } from '../../services/api';
 
 export default function Login() {
   const dispatch = useAppDispatch();
@@ -28,6 +30,13 @@ export default function Login() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    mutation.mutate();
+  };
+
+  const signInAs = (demoEmail: string) => {
+    setEmail(demoEmail);
+    setPassword(DEMO_PASSWORD);
     setFormError(null);
     mutation.mutate();
   };
@@ -74,6 +83,32 @@ export default function Login() {
             Register
           </Link>
         </p>
+
+        {DEMO_MODE && (
+          <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <div className="mb-2 text-xs uppercase text-slate-400">Demo accounts</div>
+            <div className="space-y-2">
+              {DEMO_ACCOUNTS.map((account) => (
+                <button
+                  key={account.email}
+                  type="button"
+                  onClick={() => signInAs(account.email)}
+                  disabled={mutation.isPending}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  <span>
+                    <span className="font-medium">{account.label}</span>
+                    <span className="ml-2 text-xs text-slate-400">{account.email}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-slate-400">{account.hint}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Password for all three: <code>{DEMO_PASSWORD}</code>
+            </p>
+          </div>
+        )}
       </Card>
     </div>
   );

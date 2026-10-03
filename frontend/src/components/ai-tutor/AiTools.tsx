@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Spinner } from '../common/ui';
@@ -17,7 +16,6 @@ type Tab = 'summary' | 'flashcards' | 'quiz' | 'plan';
  * study plan from quiz history.
  */
 export default function AiTools({ lectureId, moduleId }: Props) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [active, setActive] = useState<Tab | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
@@ -98,7 +96,12 @@ export default function AiTools({ lectureId, moduleId }: Props) {
       {message && active === 'quiz' && (
         <p className="mt-3 text-sm text-emerald-600">
           {message}{' '}
-          <button className="underline" onClick={() => navigate(0)}>Refresh</button>
+          <button
+            className="underline"
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ['course'] })}
+          >
+            Refresh
+          </button>
         </p>
       )}
 

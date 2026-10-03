@@ -169,11 +169,47 @@ Dev runs queue workers in-process (`DISABLE_INLINE_WORKER=1` to opt out).
 In production run `npm run worker` alongside the API. Streak evaluation is a
 repeatable BullMQ job (03:00 UTC); certificate PDFs generate async on demand.
 
+## Demo mode (no backend required)
+
+The frontend ships with an in-browser implementation of the `/api/v1` surface
+(`frontend/src/services/demo/`). When no API base URL is configured — a static
+host such as Vercel, or a laptop without Docker running — axios is pointed at
+that adapter instead of the network, so every screen renders real-looking data
+instead of an error:
+
+- the login screen offers one-click sign-in as **student**, **instructor** or
+  **admin** (password `DemoPass123!`);
+- catalog, course detail, forum, player, quizzes, assignments, notifications,
+  badges, certificates and the admin panel all work, including mutations
+  (enrol, post, flag, moderate, create courses, auto-grading);
+- the AI tutor answers with transcript citations, computed by lexical overlap
+  rather than a model call, and says so in the reply;
+- certificate downloads return a real (plain) PDF.
+
+Override it in either direction:
+
+| Setting | Effect |
+|---|---|
+| `VITE_API_BASE_URL=https://api.example.com/api/v1` | always call a real API |
+| `VITE_DEMO_MODE=true` | force demo mode (handy in `npm run dev`) |
+| `VITE_DEMO_MODE=false` | force real mode |
+| `?demo=off` / `?demo=on` in the URL | runtime escape hatch on a deployed site |
+
+Defaults: **off** during `vite dev` (the proxy to `localhost:4000` is expected
+to be running) and **on** for production builds without an absolute
+`VITE_API_BASE_URL`.
+
+The adapter is held to the real contract by `frontend/src/services/demo/server.test.ts`
+(auth, RBAC, enrolment rules, grading parity with `backend/src/utils/grading.ts`,
+PDF output), so the demo cannot quietly drift from the API.
+
 ## Testing
 
 ```bash
 cd backend && npm test        # vitest: grading, streaks, errors, schemas
+cd frontend && npm test       # vitest: demo backend contract tests
 cd frontend && npm run build  # typecheck + production build
+cd ai-service && pytest       # RAG chunking, LLM provider resolution
 
 # End-to-end smoke (data layer + migrated + backend running):
 bash scripts/smoke.sh          # Phase 1: auth, RBAC, catalog, enrollment
