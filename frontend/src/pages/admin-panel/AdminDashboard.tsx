@@ -21,7 +21,10 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Admin panel</h1>
 
-      <nav aria-label="Admin sections" className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
+      <nav
+        aria-label="Admin sections"
+        className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
+      >
         {TABS.map((t) => (
           <button
             key={t.id}

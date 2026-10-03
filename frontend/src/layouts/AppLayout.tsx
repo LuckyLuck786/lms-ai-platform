@@ -34,31 +34,36 @@ export default function AppLayout() {
         Skip to main content
       </a>
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="text-lg font-bold text-brand-700 dark:text-brand-100">
-              Vertexon <span className="text-slate-400">LMS-AI</span>
-            </Link>
-            <nav aria-label="Main" className="flex items-center gap-1">
-              <NavLink to="/" end className={navLinkClass}>
-                {t('nav.dashboard')}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+          <Link
+            to="/"
+            className="whitespace-nowrap text-lg font-bold text-brand-700 dark:text-brand-100"
+          >
+            Vertexon <span className="text-slate-400">LMS-AI</span>
+          </Link>
+          {/* Sits inline on wide screens and wraps onto its own row on narrow ones. */}
+          <nav
+            aria-label="Main"
+            className="order-last flex w-full items-center gap-1 sm:order-none sm:w-auto"
+          >
+            <NavLink to="/" end className={navLinkClass}>
+              {t('nav.dashboard')}
+            </NavLink>
+            <NavLink to="/catalog" className={navLinkClass}>
+              {t('nav.catalog')}
+            </NavLink>
+            {user?.roles.includes('instructor') && (
+              <NavLink to="/instructor" className={navLinkClass}>
+                {t('nav.instructor')}
               </NavLink>
-              <NavLink to="/catalog" className={navLinkClass}>
-                {t('nav.catalog')}
+            )}
+            {user?.roles.includes('admin') && (
+              <NavLink to="/admin" className={navLinkClass}>
+                {t('nav.admin')}
               </NavLink>
-              {user?.roles.includes('instructor') && (
-                <NavLink to="/instructor" className={navLinkClass}>
-                  {t('nav.instructor')}
-                </NavLink>
-              )}
-              {user?.roles.includes('admin') && (
-                <NavLink to="/admin" className={navLinkClass}>
-                  {t('nav.admin')}
-                </NavLink>
-              )}
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
+            )}
+          </nav>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <label htmlFor="lang-select" className="sr-only">Language</label>
             <select
               id="lang-select"

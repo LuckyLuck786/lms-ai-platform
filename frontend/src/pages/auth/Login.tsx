@@ -96,11 +96,13 @@ export default function Login() {
                   disabled={mutation.isPending}
                   className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
                 >
-                  <span>
+                  <span className="min-w-0">
                     <span className="font-medium">{account.label}</span>
                     <span className="ml-2 text-xs text-slate-400">{account.email}</span>
                   </span>
-                  <span className="shrink-0 text-xs text-slate-400">{account.hint}</span>
+                  <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">
+                    {account.hint}
+                  </span>
                 </button>
               ))}
             </div>
