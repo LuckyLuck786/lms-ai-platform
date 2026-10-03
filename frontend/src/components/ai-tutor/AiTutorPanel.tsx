@@ -44,7 +44,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
 
   // Adopt an existing session for this course, or lazily create one on first send.
   useEffect(() => {
-    const first = sessions.data?.items[0];
+    const first = sessions.data?.items?.[0];
     if (first && !sessionId) {
       setSessionId(first.id);
       setMode(first.mode || 'intermediate');

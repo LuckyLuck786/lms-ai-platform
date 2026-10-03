@@ -43,7 +43,9 @@ export default function CourseCatalog() {
     update({ q });
   };
 
-  const totalPages = query.data ? Math.max(1, Math.ceil(query.data.total / query.data.limit)) : 1;
+  const totalPages = query.data?.total && query.data?.limit
+    ? Math.max(1, Math.ceil(Number(query.data.total) / Number(query.data.limit)))
+    : 1;
 
   return (
     <div className="space-y-6">
@@ -82,7 +84,7 @@ export default function CourseCatalog() {
       {query.error && <Alert>{apiErrorMessage(query.error)}</Alert>}
       {query.isLoading ? (
         <div className="flex justify-center py-12"><Spinner /></div>
-      ) : query.data?.items.length === 0 ? (
+      ) : query.data?.items?.length === 0 ? (
         <Card className="text-center text-slate-500">No courses match your filters.</Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

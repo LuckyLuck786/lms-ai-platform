@@ -102,7 +102,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
         )}
 
         {threads.isLoading && <div className="flex justify-center py-6"><Spinner /></div>}
-        {threads.data?.items.length === 0 && (
+        {threads.data?.items?.length === 0 && (
           <Card className="text-slate-500">No discussions yet — start one!</Card>
         )}
 
@@ -185,7 +185,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
 
       <aside aria-label="Announcements" className="space-y-3">
         <h2 className="text-lg font-semibold">📣 Announcements</h2>
-        {announcements.data?.items.length === 0 && (
+        {announcements.data?.items?.length === 0 && (
           <Card className="text-sm text-slate-500">No announcements.</Card>
         )}
         {announcements.data?.items.map((a) => (

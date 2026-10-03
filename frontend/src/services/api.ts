@@ -18,7 +18,24 @@ let refreshing: Promise<AuthResponse> | null = null;
 
 /** On 401, transparently refresh the access token once, then retry. */
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    // Behind a static host, /api/* can silently resolve to the SPA shell
+    // (HTML with status 200). Treat that as a failed API call so queries
+    // surface a proper error instead of crashing on undefined data.
+    const contentType = String(res.headers?.['content-type'] ?? '');
+    if (res.config.responseType !== 'blob' && !contentType.includes('application/json')) {
+      return Promise.reject(
+        new AxiosError(
+          'API returned a non-JSON response — is the backend connected?',
+          'EBADRESPONSE',
+          res.config,
+          res.request,
+          res,
+        ),
+      );
+    }
+    return res;
+  },
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
     const refreshToken = store.getState().auth.refreshToken;
