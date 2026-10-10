@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card } from '../../components/common/ui';
 import { Course } from '../../utils/types';
+import { useI18n } from '../../utils/i18n';
 
 /**
  * Instructor content tools: add modules/lectures, build quizzes manually
@@ -12,7 +13,11 @@ import { Course } from '../../utils/types';
 interface ModuleOption {
   id: string;
   title: string;
+  lectures?: { id: string; title: string }[];
 }
+
+/** Max sizes mirror the backend limits (512 MB video, 10 files per request). */
+const VIDEO_MAX_BYTES = 512 * 1024 * 1024;
 
 interface DraftQuestion {
   question_text: string;
@@ -30,6 +35,7 @@ const emptyQuestion = (): DraftQuestion => ({
 });
 
 export default function InstructorContentTools({ courses }: { courses: Course[] }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [courseId, setCourseId] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +47,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
     enabled: !!courseId,
   });
   const modules = courseDetail.data?.modules ?? [];
+  const lectures = modules.flatMap((m) => m.lectures ?? []);
 
   // --- module ---
   const [moduleTitle, setModuleTitle] = useState('');
@@ -48,27 +55,66 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
     mutationFn: async () => (await api.post(`/courses/${courseId}/modules`, { title: moduleTitle })).data,
     onSuccess: () => {
       setModuleTitle('');
-      setSuccess('Module added');
+      setSuccess(t('tools.moduleAdded'));
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['course', courseId] });
     },
     onError: (e) => setError(apiErrorMessage(e)),
   });
 
-  // --- lecture ---
+  // --- lecture (FR-I2: video + slide/PDF upload) ---
   const [lecture, setLecture] = useState({ module_id: '', title: '', duration_seconds: '', transcript: '' });
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [resourceFiles, setResourceFiles] = useState<File[]>([]);
+
+  const clearLectureForm = () => {
+    setLecture({ module_id: '', title: '', duration_seconds: '', transcript: '' });
+    setVideoFile(null);
+    setResourceFiles([]);
+  };
+
   const addLecture = useMutation({
-    mutationFn: async () =>
-      (
+    mutationFn: async () => {
+      // Multipart when material is attached, plain JSON otherwise — the API
+      // accepts both.
+      if (videoFile || resourceFiles.length) {
+        const form = new FormData();
+        form.append('title', lecture.title);
+        if (lecture.duration_seconds) form.append('duration_seconds', lecture.duration_seconds);
+        if (lecture.transcript) form.append('transcript', lecture.transcript);
+        if (videoFile) form.append('video', videoFile);
+        resourceFiles.forEach((file) => form.append('resources', file));
+        return (await api.post(`/modules/${lecture.module_id}/lectures`, form)).data;
+      }
+      return (
         await api.post(`/modules/${lecture.module_id}/lectures`, {
           title: lecture.title,
           duration_seconds: lecture.duration_seconds ? Number(lecture.duration_seconds) : undefined,
           transcript: lecture.transcript || undefined,
         })
-      ).data,
+      ).data;
+    },
     onSuccess: () => {
-      setLecture({ module_id: '', title: '', duration_seconds: '', transcript: '' });
-      setSuccess('Lecture added');
+      clearLectureForm();
+      setSuccess(t('tools.lectureAdded'));
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  });
+
+  // --- attach material to an existing lecture ---
+  const [resourceLectureId, setResourceLectureId] = useState('');
+  const [extraFiles, setExtraFiles] = useState<File[]>([]);
+  const uploadResources = useMutation({
+    mutationFn: async () => {
+      const form = new FormData();
+      extraFiles.forEach((file) => form.append('resources', file));
+      return (await api.post(`/lectures/${resourceLectureId}/resources`, form)).data;
+    },
+    onSuccess: (data: { added?: unknown[] }) => {
+      setExtraFiles([]);
+      setSuccess(t('tools.uploadedCount', { count: data.added?.length ?? 0 }));
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['course', courseId] });
     },
@@ -84,7 +130,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
     onSuccess: () => {
       setQuiz({ module_id: '', title: '' });
       setQuestions([emptyQuestion()]);
-      setSuccess('Quiz created');
+      setSuccess(t('tools.quizCreated'));
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['course', courseId] });
     },
@@ -119,7 +165,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
       (await api.post(`/courses/${courseId}/announcements`, { content: announcement })).data,
     onSuccess: (d: { notified: number }) => {
       setAnnouncement('');
-      setSuccess(`Announcement posted — ${d.notified} student(s) notified`);
+      setSuccess(t('tools.announcementPosted', { count: d.notified }));
       setError(null);
     },
     onError: (e) => setError(apiErrorMessage(e)),
@@ -139,7 +185,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
       ).data,
     onSuccess: () => {
       setAssignment({ title: '', instructions: '', due_date: '' });
-      setSuccess('Assignment created');
+      setSuccess(t('tools.assignmentCreated'));
       setError(null);
     },
     onError: (e) => setError(apiErrorMessage(e)),
@@ -150,7 +196,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
   return (
     <div className="space-y-6">
       <Card>
-        <label className="label" htmlFor="course-select">Work on course</label>
+        <label className="label" htmlFor="course-select">{t('tools.selectCourse')}</label>
         <select
           id="course-select"
           className="input max-w-md"
@@ -171,42 +217,42 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
       {error && <Alert>{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
 
-      {noCourse && <Card className="text-slate-500">Select a course above to manage its content.</Card>}
+      {noCourse && <Card className="text-slate-500">{t('tools.selectPrompt')}</Card>}
 
       {!noCourse && (
         <>
           {/* Module */}
           <Card>
-            <h3 className="mb-3 font-semibold">1️⃣ Add a module</h3>
+            <h3 className="mb-3 font-semibold">1️⃣ {t('tools.module')}</h3>
             <div className="flex gap-2">
               <input
                 className="input flex-1"
-                placeholder="Module title"
+                placeholder={t('tools.modulePlaceholder')}
                 value={moduleTitle}
                 onChange={(e) => setModuleTitle(e.target.value)}
               />
               <button className="btn-primary" disabled={!moduleTitle || addModule.isPending} onClick={() => addModule.mutate()}>
-                Add
+                {t('common.add')}
               </button>
             </div>
           </Card>
 
           {/* Lecture */}
           <Card>
-            <h3 className="mb-3 font-semibold">2️⃣ Add a lecture</h3>
+            <h3 className="mb-3 font-semibold">2️⃣ {t('tools.lecture')}</h3>
             <div className="grid gap-3 sm:grid-cols-2">
               <select
                 className="input"
                 value={lecture.module_id}
                 onChange={(e) => setLecture((l) => ({ ...l, module_id: e.target.value }))}
-                aria-label="Module"
+                aria-label={t('tools.selectModule')}
               >
-                <option value="">— module —</option>
+                <option value="">{t('tools.selectModule')}</option>
                 {modules.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
               <input
                 className="input"
-                placeholder="Lecture title"
+                placeholder={t('tools.lectureTitle')}
                 value={lecture.title}
                 onChange={(e) => setLecture((l) => ({ ...l, title: e.target.value }))}
               />
@@ -214,43 +260,111 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                 className="input"
                 type="number"
                 min={0}
-                placeholder="Duration (seconds)"
+                placeholder={t('tools.lectureDuration')}
                 value={lecture.duration_seconds}
                 onChange={(e) => setLecture((l) => ({ ...l, duration_seconds: e.target.value }))}
               />
               <textarea
-                className="input"
+                className="input sm:col-span-2"
                 rows={2}
-                placeholder="Transcript (powers AI tutor in Phase 3)"
+                placeholder={t('tools.lectureTranscript')}
                 value={lecture.transcript}
                 onChange={(e) => setLecture((l) => ({ ...l, transcript: e.target.value }))}
               />
+              <div>
+                <label className="label" htmlFor="lecture-video">{t('tools.lectureVideo')}</label>
+                <input
+                  id="lecture-video"
+                  className="input"
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (file && file.size > VIDEO_MAX_BYTES) {
+                      setError(t('tools.videoTooLarge', { name: file.name }));
+                      setVideoFile(null);
+                      e.target.value = '';
+                      return;
+                    }
+                    setError(null);
+                    setVideoFile(file);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="lecture-resources">{t('tools.lectureResources')}</label>
+                <input
+                  id="lecture-resources"
+                  className="input"
+                  type="file"
+                  multiple
+                  accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.zip,image/*"
+                  onChange={(e) => setResourceFiles(Array.from(e.target.files ?? []))}
+                />
+              </div>
             </div>
             <button
               className="btn-primary mt-3"
               disabled={!lecture.module_id || !lecture.title || addLecture.isPending}
               onClick={() => addLecture.mutate()}
             >
-              Add lecture
+              {addLecture.isPending ? t('common.uploading') : t('tools.addLecture')}
             </button>
+          </Card>
+
+          {/* Attach material to an existing lecture (FR-I2) */}
+          <Card>
+            <h3 className="mb-3 font-semibold">📎 {t('tools.attachMaterial')}</h3>
+            <p className="mb-3 text-sm text-slate-500">{t('tools.attachHint')}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <select
+                className="input"
+                value={resourceLectureId}
+                onChange={(e) => setResourceLectureId(e.target.value)}
+                aria-label={t('tools.pickLecture')}
+              >
+                <option value="">{t('tools.pickLecture')}</option>
+                {lectures.map((l) => (
+                  <option key={l.id} value={l.id}>{l.title}</option>
+                ))}
+              </select>
+              <input
+                className="input"
+                type="file"
+                multiple
+                accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.zip,image/*"
+                onChange={(e) => setExtraFiles(Array.from(e.target.files ?? []))}
+                aria-label={t('tools.lectureResources')}
+              />
+            </div>
+            <button
+              className="btn-primary mt-3"
+              disabled={!resourceLectureId || !extraFiles.length || uploadResources.isPending}
+              onClick={() => uploadResources.mutate()}
+            >
+              {uploadResources.isPending ? t('common.uploading') : t('tools.uploadMaterial')}
+            </button>
+            {!lectures.length && (
+              <p className="mt-2 text-sm text-slate-500">{t('tools.noLecturesYet')}</p>
+            )}
           </Card>
 
           {/* Quiz builder */}
           <Card>
-            <h3 className="mb-3 font-semibold">3️⃣ Build a quiz (auto-graded)</h3>
+            <h3 className="mb-3 font-semibold">3️⃣ {t('tools.quiz')}</h3>
             <div className="mb-3 grid gap-3 sm:grid-cols-2">
               <select
                 className="input"
                 value={quiz.module_id}
                 onChange={(e) => setQuiz((q) => ({ ...q, module_id: e.target.value }))}
-                aria-label="Quiz module"
+                aria-label={t('tools.selectModule')}
               >
-                <option value="">— module —</option>
+                <option value="">{t('tools.selectModule')}</option>
                 {modules.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
               <input
                 className="input"
-                placeholder="Quiz title"
+                placeholder={t('tools.quizTitle')}
                 value={quiz.title}
                 onChange={(e) => setQuiz((q) => ({ ...q, title: e.target.value }))}
               />
@@ -262,7 +376,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                   <div className="mb-2 flex gap-2">
                     <input
                       className="input flex-1"
-                      placeholder={`Question ${qi + 1}`}
+                      placeholder={t('tools.question', { number: qi + 1 })}
                       value={q.question_text}
                       onChange={(e) => setQuestion(qi, { question_text: e.target.value })}
                     />
@@ -281,17 +395,17 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                                 : emptyQuestion().options,
                         });
                       }}
-                      aria-label="Question type"
+                      aria-label={t('tools.questionType')}
                     >
-                      <option value="mcq">MCQ</option>
-                      <option value="multi_select">Multi-select</option>
-                      <option value="short_answer">Short answer</option>
+                      <option value="mcq">{t('tools.mcq')}</option>
+                      <option value="multi_select">{t('tools.multiSelect')}</option>
+                      <option value="short_answer">{t('tools.shortAnswer')}</option>
                     </select>
                     {questions.length > 1 && (
                       <button
                         className="btn-secondary"
                         onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== qi))}
-                        aria-label={`Remove question ${qi + 1}`}
+                        aria-label={`${t('common.delete')} — ${qi + 1}`}
                       >
                         ✕
                       </button>
@@ -307,7 +421,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                             name={`correct-${qi}`}
                             checked={o.is_correct}
                             onChange={(e) => setOption(qi, oi, { is_correct: e.target.checked })}
-                            aria-label={`Mark option ${oi + 1} correct`}
+                            aria-label={`${t('tools.addOption')} ${oi + 1}`}
                           />
                           <input
                             className="input flex-1"
@@ -326,7 +440,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                             })
                           }
                         >
-                          + Add option
+                          {t('tools.addOption')}
                         </button>
                       )}
                     </div>
@@ -337,25 +451,25 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
 
             <div className="mt-3 flex gap-2">
               <button className="btn-secondary" onClick={() => setQuestions((qs) => [...qs, emptyQuestion()])}>
-                + Question
+                {t('tools.addQuestion')}
               </button>
               <button
                 className="btn-primary"
                 disabled={!quiz.module_id || !quiz.title || createQuiz.isPending}
                 onClick={() => createQuiz.mutate()}
               >
-                {createQuiz.isPending ? 'Creating…' : 'Create quiz'}
+                {createQuiz.isPending ? t('common.creating') : t('tools.createQuiz')}
               </button>
             </div>
           </Card>
 
           {/* Assignment */}
           <Card>
-            <h3 className="mb-3 font-semibold">4️⃣ Create an assignment</h3>
+            <h3 className="mb-3 font-semibold">4️⃣ {t('tools.assignment')}</h3>
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 className="input"
-                placeholder="Title"
+                placeholder={t('tools.assignmentTitle')}
                 value={assignment.title}
                 onChange={(e) => setAssignment((a) => ({ ...a, title: e.target.value }))}
               />
@@ -364,12 +478,12 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                 type="datetime-local"
                 value={assignment.due_date}
                 onChange={(e) => setAssignment((a) => ({ ...a, due_date: e.target.value }))}
-                aria-label="Due date"
+                aria-label={t('tools.assignmentDue')}
               />
               <textarea
                 className="input sm:col-span-2"
                 rows={3}
-                placeholder="Instructions / rubric"
+                placeholder={t('tools.assignmentInstructions')}
                 value={assignment.instructions}
                 onChange={(e) => setAssignment((a) => ({ ...a, instructions: e.target.value }))}
               />
@@ -382,28 +496,28 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                 createAssignment.mutate();
               }}
             >
-              Create assignment
+              {t('tools.createAssignment')}
             </button>
           </Card>
 
           {/* Announcement (FR-I6) */}
           <Card>
-            <h3 className="mb-3 font-semibold">📣 Post an announcement</h3>
+            <h3 className="mb-3 font-semibold">📣 {t('tools.announcement')}</h3>
             <div className="flex gap-2">
               <textarea
                 className="input flex-1"
                 rows={2}
-                placeholder="Message to all enrolled students (in-app + email)…"
+                placeholder={t('tools.announcementPlaceholder')}
                 value={announcement}
                 onChange={(e) => setAnnouncement(e.target.value)}
-                aria-label="Announcement content"
+                aria-label={t('tools.announcement')}
               />
               <button
                 className="btn-primary self-end"
                 disabled={!announcement.trim() || postAnnouncement.isPending}
                 onClick={() => postAnnouncement.mutate()}
               >
-                {postAnnouncement.isPending ? 'Posting…' : 'Post'}
+                {postAnnouncement.isPending ? t('tools.posting') : t('tools.post')}
               </button>
             </div>
           </Card>

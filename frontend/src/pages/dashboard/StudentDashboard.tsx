@@ -4,8 +4,10 @@ import { api, apiErrorMessage } from '../../services/api';
 import { useAppSelector } from '../../store/hooks';
 import { Alert, Card, ProgressBar, Spinner } from '../../components/common/ui';
 import { Badge, Certificate, Enrollment, Streak } from '../../utils/types';
+import { useI18n } from '../../utils/i18n';
 
 export default function StudentDashboard() {
+  const { t } = useI18n();
   const user = useAppSelector((s) => s.auth.user);
   const accessToken = useAppSelector((s) => s.auth.accessToken);
 
@@ -73,20 +75,22 @@ export default function StudentDashboard() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Welcome back, {user?.full_name?.split(' ')[0]} 👋</h1>
-          <p className="text-sm text-slate-500">Pick up where you left off.</p>
+          <h1 className="text-2xl font-bold">
+            {t('dashboard.welcome', { name: user?.full_name?.split(' ')[0] ?? '' })}
+          </h1>
+          <p className="text-sm text-slate-500">{t('dashboard.subtitle')}</p>
         </div>
         <div className="card flex items-center gap-6 py-3">
           <div>
-            <div className="text-xs uppercase text-slate-400">Courses</div>
+            <div className="text-xs uppercase text-slate-400">{t('dashboard.coursesCount')}</div>
             <div className="text-xl font-bold">{enrollments.length}</div>
           </div>
           <div>
-            <div className="text-xs uppercase text-slate-400">Avg. progress</div>
+            <div className="text-xs uppercase text-slate-400">{t('dashboard.avgProgress')}</div>
             <div className="text-xl font-bold">{Math.round(avgProgress)}%</div>
           </div>
           <div>
-            <div className="text-xs uppercase text-slate-400">Streak</div>
+            <div className="text-xs uppercase text-slate-400">{t('dashboard.streak')}</div>
             <div className="text-xl font-bold">🔥 {streak.data?.current_streak ?? 0}</div>
           </div>
         </div>
@@ -95,8 +99,10 @@ export default function StudentDashboard() {
       {error && <Alert>{apiErrorMessage(error)}</Alert>}
 
       {badges.data && badges.data.items.length > 0 && (
-        <section aria-label="Badges">
-          <h2 className="mb-2 text-sm font-semibold uppercase text-slate-400">Badges earned</h2>
+        <section aria-label={t('dashboard.badges')}>
+          <h2 className="mb-2 text-sm font-semibold uppercase text-slate-400">
+            {t('dashboard.badgesEarned')}
+          </h2>
           <div className="flex flex-wrap gap-2">
             {badges.data.items.map((b) => (
               <span
@@ -115,8 +121,8 @@ export default function StudentDashboard() {
         <div className="flex justify-center py-12"><Spinner /></div>
       ) : enrollments.length === 0 ? (
         <Card className="text-center">
-          <p className="mb-4 text-slate-500">You aren't enrolled in any courses yet.</p>
-          <Link to="/catalog" className="btn-primary">Browse the catalog</Link>
+          <p className="mb-4 text-slate-500">{t('dashboard.noCourses')}</p>
+          <Link to="/catalog" className="btn-primary">{t('dashboard.browseCatalog')}</Link>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">            {enrollments.map((e) => (
@@ -129,15 +135,17 @@ export default function StudentDashboard() {
               </div>
               <p className="mb-3 text-sm text-slate-500">{e.instructor_name}</p>
               <ProgressBar percent={Number(e.progress_percent)} />
-              <p className="mt-1 text-xs text-slate-400">{Number(e.progress_percent)}% complete</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {t('dashboard.percentComplete', { value: Number(e.progress_percent) })}
+              </p>
             </Link>
           ))}
         </div>
       )}
 
       {recommendations.data && recommendations.data.items.length > 0 && (
-        <section aria-label="Recommended for you">
-          <h2 className="mb-3 text-lg font-semibold">💡 Recommended for you</h2>
+        <section aria-label={t('dashboard.recommended')}>
+          <h2 className="mb-3 text-lg font-semibold">💡 {t('dashboard.recommended')}</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {recommendations.data.items.map((r) => (
               <Link key={r.course_id} to={`/catalog/${r.course_id}`} className="card transition hover:shadow-md">
@@ -156,15 +164,17 @@ export default function StudentDashboard() {
       )}
 
       {certificates.data && certificates.data.items.length > 0 && (
-        <section aria-label="Certificates">
-          <h2 className="mb-3 text-lg font-semibold">🎓 Certificates</h2>
+        <section aria-label={t('dashboard.certificates')}>
+          <h2 className="mb-3 text-lg font-semibold">🎓 {t('dashboard.certificates')}</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {certificates.data.items.map((cert) => (
               <Card key={cert.id} className="flex items-center justify-between">
                 <div>
                   <div className="font-medium">{cert.course_title}</div>
                   <div className="text-xs text-slate-400">
-                    Issued {new Date(cert.issued_at).toLocaleDateString()}
+                    {t('dashboard.issuedOn', {
+                      date: new Date(cert.issued_at).toLocaleDateString(),
+                    })}
                   </div>
                 </div>
                 <a
@@ -178,7 +188,7 @@ export default function StudentDashboard() {
                     void downloadCertificate(cert.id);
                   }}
                 >
-                  Download PDF
+                  {t('dashboard.downloadPdf')}
                 </a>
               </Card>
             ))}

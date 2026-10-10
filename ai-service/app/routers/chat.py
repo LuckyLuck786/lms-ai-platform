@@ -6,12 +6,14 @@ from pydantic import BaseModel
 from ..core.config import get_settings
 from ..core.db import execute, query_all, query_one
 from ..core.llm import LLMError, complete
+from ..core.mastery import average_mastery, fetch_course_mastery, mastery_guidance, resolve_depth
 from ..rag.prompt import build_context_blocks, build_system_prompt, fallback_reply
 from ..rag.retriever import retrieve
 
 router = APIRouter()
 
-VALID_MODES = {"beginner", "intermediate", "advanced"}
+# "auto" adapts the depth to the learner's stored topic mastery (FR-A8).
+VALID_MODES = {"beginner", "intermediate", "advanced", "auto"}
 
 
 def _require_user(x_user_id: Optional[str]) -> str:
@@ -133,6 +135,16 @@ def send_message(
     course = query_one("SELECT id, title FROM courses WHERE id = %s", [session["course_id"]])
     mode = session["mode"] or "intermediate"
 
+    # FR-A8: "auto" picks the depth from the learner's mastery rows and
+    # passes the weak-topic context into the prompt.
+    guidance = ""
+    if mode == "auto":
+        mastery_rows = fetch_course_mastery(user_id, session["course_id"])
+        depth = resolve_depth(average_mastery(mastery_rows))
+        guidance = mastery_guidance(mastery_rows)
+    else:
+        depth = mode
+
     # Step 2: similarity search scoped to this course (PRD §9.2)
     chunks = retrieve(session["course_id"], req.message)
 
@@ -142,7 +154,9 @@ def send_message(
     if get_settings().llm_available:
         try:
             reply = complete(
-                build_system_prompt(course["title"], mode, build_context_blocks(chunks)),
+                build_system_prompt(
+                    course["title"], depth, build_context_blocks(chunks), guidance
+                ),
                 [{"role": "user", "content": req.message}],
             )
         except LLMError:
@@ -177,7 +191,7 @@ def send_message(
         [session_id, reply, source_ids],
     )
 
-    return {"reply": reply, "sources": source_meta, "mode": mode}
+    return {"reply": reply, "sources": source_meta, "mode": mode, "depth": depth}
 
 
 @router.put("/sessions/{session_id}/mode")

@@ -50,6 +50,16 @@ coursesRouter.put(
   }),
 );
 
+// ---- Instructor analytics (FR-I5: drop-off, quiz scores, time-on-task) ----
+coursesRouter.get(
+  '/:id/analytics',
+  authenticate,
+  requireRole('instructor', 'admin'),
+  wrap(async (req, res) => {
+    res.json(await coursesService.getCourseAnalytics(req.user!, req.params.id));
+  }),
+);
+
 coursesRouter.post(
   '/:id/modules',
   authenticate,

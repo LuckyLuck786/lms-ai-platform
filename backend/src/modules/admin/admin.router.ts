@@ -6,6 +6,8 @@ import { notFound, badRequest } from '../../utils/errors';
 import { revokeAllRefreshTokens } from '../../utils/jwt';
 import { listPendingCourses } from '../courses/courses.service';
 import { logger } from '../../utils/logger';
+import { env } from '../../config/env';
+import { sendEmail, smtpConfigured, verifySmtp } from '../../services/email';
 
 /**
  * Admin panel APIs (FR-AD1..FR-AD5, PRD §8.7). Every route requires the
@@ -220,5 +222,45 @@ adminRouter.get(
        ORDER BY a.created_at DESC LIMIT 50`,
     );
     res.json({ items });
+  }),
+);
+
+// --- Email diagnostics (PRD §9.3) -------------------------------------------
+
+// GET /admin/email/status — is transactional email actually wired up?
+adminRouter.get(
+  '/admin/email/status',
+  wrap(async (_req, res) => {
+    const probe = await verifySmtp();
+    res.json({
+      configured: smtpConfigured(),
+      from: env.smtp.from,
+      from_name: env.smtp.fromName,
+      app_url: env.smtp.appUrl,
+      verified: probe.ok,
+      error: probe.error ?? null,
+    });
+  }),
+);
+
+// POST /admin/email/test — send a real message to prove delivery end to end
+const testEmailSchema = z.object({ to: z.string().email().optional() });
+
+adminRouter.post(
+  '/admin/email/test',
+  wrap(async (req, res) => {
+    const input = testEmailSchema.parse(req.body ?? {});
+    const recipient = input.to ?? req.user!.email;
+    const result = await sendEmail({
+      kind: 'generic',
+      subject: 'Vertexon LMS-AI email delivery test',
+      body:
+        'This is a delivery test from your LMS-AI platform. If you can read this, ' +
+        'transactional email is configured correctly.',
+      recipients: [recipient],
+      cta: { label: 'Open the dashboard', path: '/dashboard' },
+    });
+    await audit(req.user!.id, 'email_test_sent', 'email', null, { to: recipient, ...result });
+    res.json({ to: recipient, ...result });
   }),
 );

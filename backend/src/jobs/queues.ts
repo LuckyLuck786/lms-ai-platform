@@ -2,10 +2,12 @@ import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
+import type { EmailCta, EmailKind } from '../services/email';
 
 /**
  * Background job queues (PRD §9.3): Redis + BullMQ.
  *  - certificates: generated when a learner hits 100% course completion
+ *  - notifications: transactional email dispatch (SMTP)
  *  - streaks: daily cron evaluating broken streaks platform-wide
  */
 
@@ -16,12 +18,14 @@ export const queueConnection = () =>
 let certificateQueue: Queue | null = null;
 let streakQueue: Queue | null = null;
 let notificationQueue: Queue | null = null;
+let masteryQueue: Queue | null = null;
 
 export interface EmailJob {
-  kind: 'announcement' | 'certificate' | 'generic';
+  kind: EmailKind;
   subject: string;
   body: string;
   recipients: string[];
+  cta?: EmailCta;
 }
 
 function getCertificateQueue(): Queue {
@@ -67,6 +71,33 @@ function getNotificationQueue(): Queue {
   return notificationQueue;
 }
 
+function getMasteryQueue(): Queue {
+  masteryQueue ??= new Queue('mastery', { connection: queueConnection() });
+  return masteryQueue;
+}
+
+/**
+ * Recompute a learner's topic-mastery rows (FR-A8). Jobs are deduplicated by
+ * user+course so a burst of chat/quiz events collapses into one recompute.
+ */
+export async function queueMasteryRecompute(payload: {
+  userId: string;
+  courseId: string;
+}): Promise<void> {
+  try {
+    await getMasteryQueue().add('recompute', payload, {
+      jobId: `${payload.userId}:${payload.courseId}`,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2_000 },
+      removeOnComplete: 100,
+    });
+  } catch (err) {
+    logger.warn('mastery_queue_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /** Registers the daily streak-evaluation cron (idempotent). */
 export async function registerStreakCron(): Promise<void> {
   try {
@@ -87,5 +118,6 @@ export async function closeQueues(): Promise<void> {
     certificateQueue?.close(),
     streakQueue?.close(),
     notificationQueue?.close(),
+    masteryQueue?.close(),
   ]);
 }

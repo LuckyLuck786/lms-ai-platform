@@ -1,8 +1,17 @@
 """LLM client with pluggable providers.
 
-Priority: Groq (free, fast llama-3.3-70b) → Gemini (flash) → Anthropic.
-Whichever API key is configured wins; `resolve_provider` is pure so the
-selection logic is unit-testable.
+Priority: Groq → Gemini → Anthropic. Whichever API key is set wins;
+`resolve_provider` is pure so the selection logic stays unit-testable.
+
+Two provider quirks are absorbed here rather than leaking into the routers:
+
+* Groq's reasoning models (``gpt-oss-*``) bill hidden "thinking" tokens
+  against ``max_tokens`` and may return an empty ``content`` with a populated
+  ``reasoning`` field. We pin ``reasoning_effort: "low"`` and read whichever
+  field carries text.
+* Gemini 2.5+/3.x does the same via ``thoughtsTokenCount``. Thinking is
+  disabled for tutoring (latency is a stated KPI) and any ``thought`` parts
+  are dropped from the assembled answer.
 """
 
 from typing import Optional
@@ -37,6 +46,22 @@ def get_provider() -> Optional[str]:
     return resolve_provider(s.groq_api_key, s.gemini_api_key, s.anthropic_api_key)
 
 
+# --- Groq -------------------------------------------------------------------
+
+
+def _uses_hidden_reasoning(model: str) -> bool:
+    """True for models that spend part of the output budget on hidden thinking."""
+    return "gpt-oss" in model.lower()
+
+
+def _groq_message_text(message: dict) -> str:
+    """Prefer the visible answer, fall back to reasoning so we never return ""."""
+    content = (message.get("content") or "").strip()
+    if content:
+        return content
+    return (message.get("reasoning") or "").strip()
+
+
 def _call_groq(system: str, messages: list[dict], max_tokens: int) -> str:
     s = get_settings()
     payload = {
@@ -45,9 +70,16 @@ def _call_groq(system: str, messages: list[dict], max_tokens: int) -> str:
         "temperature": 0.2,
         "messages": [
             {"role": "system", "content": system},
-            *[{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+            *[
+                {"role": m.get("role", "user"), "content": m.get("content", "")}
+                for m in messages
+            ],
         ],
     }
+    if _uses_hidden_reasoning(s.groq_model):
+        # Reasoning tokens are drawn from max_tokens, so a "medium"/"high"
+        # effort can truncate the visible answer on small budgets.
+        payload["reasoning_effort"] = "low"
     try:
         resp = httpx.post(
             GROQ_URL,
@@ -56,9 +88,15 @@ def _call_groq(system: str, messages: list[dict], max_tokens: int) -> str:
             timeout=45,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        text = _groq_message_text(resp.json()["choices"][0]["message"])
     except (httpx.HTTPError, KeyError, IndexError) as exc:
         raise LLMError(f"Groq call failed: {exc}") from exc
+    if not text:
+        raise LLMError("Groq returned an empty completion")
+    return text
+
+
+# --- Gemini -----------------------------------------------------------------
 
 
 def build_gemini_prompt(system: str, messages: list[dict]) -> str:
@@ -70,21 +108,46 @@ def build_gemini_prompt(system: str, messages: list[dict]) -> str:
     return f"{system}\n\n{turns}\nAssistant:"
 
 
+def _gemini_generation_config(model: str, max_tokens: int) -> dict:
+    config: dict = {"maxOutputTokens": max_tokens, "temperature": 0.2}
+    if model.startswith("gemini-2.5") or model.startswith("gemini-3"):
+        # Without this, thinking can consume nearly the whole output budget —
+        # a 200-token request was observed spending 189 tokens on thoughts.
+        config["thinkingConfig"] = {
+            "thinkingBudget": get_settings().gemini_thinking_budget
+        }
+    return config
+
+
+def _gemini_candidate_text(candidate: dict) -> str:
+    parts = candidate.get("content", {}).get("parts", [])
+    return "".join(
+        p.get("text", "") for p in parts if not p.get("thought")
+    ).strip()
+
+
 def _call_gemini(system: str, messages: list[dict], max_tokens: int) -> str:
     s = get_settings()
     url = GEMINI_URL.format(model=s.gemini_model)
     payload = {
         "systemInstruction": {"parts": [{"text": system}]},
-        "contents": [{"role": "user", "parts": [{"text": build_gemini_prompt("", messages)}]}],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.2},
+        "contents": [
+            {"role": "user", "parts": [{"text": build_gemini_prompt("", messages)}]}
+        ],
+        "generationConfig": _gemini_generation_config(s.gemini_model, max_tokens),
     }
     try:
         resp = httpx.post(url, json=payload, params={"key": s.gemini_api_key}, timeout=45)
         resp.raise_for_status()
-        parts = resp.json()["candidates"][0]["content"]["parts"]
-        return "".join(p.get("text", "") for p in parts)
+        text = _gemini_candidate_text(resp.json()["candidates"][0])
     except (httpx.HTTPError, KeyError, IndexError) as exc:
         raise LLMError(f"Gemini call failed: {exc}") from exc
+    if not text:
+        raise LLMError("Gemini returned an empty completion")
+    return text
+
+
+# --- Anthropic --------------------------------------------------------------
 
 
 def _call_anthropic(system: str, messages: list[dict], max_tokens: int) -> str:

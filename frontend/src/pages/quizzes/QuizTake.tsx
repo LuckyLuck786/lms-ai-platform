@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { AttemptSubmission, Quiz } from '../../utils/types';
+import { useI18n } from '../../utils/i18n';
 
 type Selections = Record<string, string[]>; // question_id -> option_ids
 
@@ -12,6 +13,7 @@ type Selections = Record<string, string[]>; // question_id -> option_ids
  * short-answer text; submits once for auto-grading and shows the score.
  */
 export default function QuizTake() {
+  const { t } = useI18n();
   const { quizId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -93,15 +95,19 @@ export default function QuizTake() {
           </div>
           {result.score !== null && (
             <p className="text-slate-500">
-              {result.score >= 70 ? '🎉 Passed!' : 'Keep practicing — retake when ready.'}
+              {result.score >= 70
+                ? `🎉 ${t('quiz.passed')}!`
+                : t('quiz.keepPractising')}
             </p>
           )}
           <div className="mt-6 flex justify-center gap-3">
-            <button className="btn-secondary" onClick={() => navigate(-1)}>Back to course</button>
+            <button className="btn-secondary" onClick={() => navigate(-1)}>
+              {t('quiz.backToCourse')}
+            </button>
           </div>
         </Card>
         <Card>
-          <h2 className="mb-3 font-semibold">Per-question results</h2>
+          <h2 className="mb-3 font-semibold">{t('quiz.perQuestion')}</h2>
           <ul className="space-y-2 text-sm">
             {quiz.data.questions.map((q, i) => {
               const outcome = result.per_question.find((p) => p.question_id === q.id);
@@ -119,7 +125,7 @@ export default function QuizTake() {
                           : 'text-red-500'
                     }
                   >
-                    {outcome?.is_correct === null ? 'manual' : outcome?.is_correct ? '✓' : '✕'}
+                    {outcome?.is_correct === null ? t('quiz.ungraded') : outcome?.is_correct ? '✓' : '✕'}
                   </span>
                 </li>
               );
@@ -135,7 +141,10 @@ export default function QuizTake() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{quiz.data.title}</h1>
         <span className="text-sm text-slate-500">
-          {answeredCount}/{quiz.data.questions.length} answered
+          {t('quiz.answered', {
+            answered: answeredCount,
+            total: quiz.data.questions.length,
+          })}
         </span>
       </div>
 
@@ -156,10 +165,10 @@ export default function QuizTake() {
               </h2>
               <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs uppercase dark:bg-slate-800">
                 {q.question_type === 'mcq'
-                  ? 'single'
+                  ? t('quiz.typeSingle')
                   : q.question_type === 'multi_select'
-                    ? 'multi'
-                    : 'written'}
+                    ? t('quiz.typeMulti')
+                    : t('quiz.typeWritten')}
               </span>
             </div>
 
@@ -167,10 +176,10 @@ export default function QuizTake() {
               <textarea
                 className="input"
                 rows={4}
-                placeholder="Type your answer…"
+                placeholder={t('quiz.shortAnswerPlaceholder')}
                 value={textAnswers[q.id] ?? ''}
                 onChange={(e) => setTextAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
-                aria-label={`Answer for question ${i + 1}`}
+                aria-label={t('quiz.answerFor', { number: i + 1 })}
               />
             ) : (
               <fieldset>
@@ -197,7 +206,7 @@ export default function QuizTake() {
         ))}
 
         <button type="submit" className="btn-primary w-full" disabled={submit.isPending}>
-          {submit.isPending ? 'Grading…' : 'Submit answers'}
+          {submit.isPending ? t('quiz.grading') : t('quiz.submit')}
         </button>
       </form>
     </div>

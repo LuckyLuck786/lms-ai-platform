@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../../utils/i18n';
 
 /** WCAG-friendly dark mode toggle persisted in localStorage. */
 export default function ThemeToggle() {
+  const { t } = useI18n();
   const [dark, setDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
   );
@@ -20,11 +22,11 @@ export default function ThemeToggle() {
       type="button"
       onClick={() => setDark((d) => !d)}
       aria-pressed={dark}
-      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-label={t('theme.toggle')}
       className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100
         dark:border-slate-700 dark:hover:bg-slate-800"
     >
-      {dark ? '☀️ Light' : '🌙 Dark'}
+      {dark ? `☀️ ${t('theme.light')}` : `🌙 ${t('theme.dark')}`}
     </button>
   );
 }

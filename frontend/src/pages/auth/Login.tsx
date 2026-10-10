@@ -8,8 +8,10 @@ import { AuthResponse } from '../../utils/types';
 import { Alert, Card } from '../../components/common/ui';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../services/demo';
 import { DEMO_MODE } from '../../services/api';
+import { useI18n } from '../../utils/i18n';
 
 export default function Login() {
+  const { t } = useI18n();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -44,11 +46,11 @@ export default function Login() {
   return (
     <div className="mx-auto max-w-md">
       <Card>
-        <h1 className="mb-4 text-xl font-bold">Log in</h1>
+        <h1 className="mb-4 text-xl font-bold">{t('auth.login')}</h1>
         {formError && <div className="mb-4"><Alert>{formError}</Alert></div>}
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="label" htmlFor="email">Email</label>
+            <label className="label" htmlFor="email">{t('auth.email')}</label>
             <input
               id="email"
               type="email"
@@ -61,7 +63,7 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="label" htmlFor="password">Password</label>
+            <label className="label" htmlFor="password">{t('auth.password')}</label>
             <input
               id="password"
               type="password"
@@ -74,19 +76,19 @@ export default function Login() {
             />
           </div>
           <button type="submit" className="btn-primary w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Logging in…' : 'Log in'}
+            {mutation.isPending ? t('auth.loggingIn') : t('auth.login')}
           </button>
         </form>
         <p className="mt-4 text-sm text-slate-500">
-          No account?{' '}
+          {t('auth.noAccount')}{' '}
           <Link to="/register" className="font-medium text-brand-600 hover:underline">
-            Register
+            {t('auth.register')}
           </Link>
         </p>
 
         {DEMO_MODE && (
           <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <div className="mb-2 text-xs uppercase text-slate-400">Demo accounts</div>
+            <div className="mb-2 text-xs uppercase text-slate-400">{t('auth.demoAccounts')}</div>
             <div className="space-y-2">
               {DEMO_ACCOUNTS.map((account) => (
                 <button
@@ -107,7 +109,7 @@ export default function Login() {
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Password for all three: <code>{DEMO_PASSWORD}</code>
+              {t('auth.demoPassword')} <code>{DEMO_PASSWORD}</code>
             </p>
           </div>
         )}

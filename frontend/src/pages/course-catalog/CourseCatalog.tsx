@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { Course } from '../../utils/types';
+import { useI18n } from '../../utils/i18n';
 
 interface CatalogPage {
   items: Course[];
@@ -15,6 +16,7 @@ interface CatalogPage {
 const CATEGORIES = ['Computer Science', 'Data Science', 'Mathematics', 'Business', 'Design'];
 
 export default function CourseCatalog() {
+  const { t } = useI18n();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState(params.get('q') ?? '');
   const category = params.get('category') ?? '';
@@ -49,43 +51,43 @@ export default function CourseCatalog() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Course catalog</h1>
+      <h1 className="text-2xl font-bold">{t('catalog.title')}</h1>
 
       <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3" role="search">
         <div className="min-w-[220px] flex-1">
-          <label className="label" htmlFor="q">Search</label>
+          <label className="label" htmlFor="q">{t('common.search')}</label>
           <input
             id="q"
             className="input"
-            placeholder="Search courses…"
+            placeholder={t('catalog.searchPlaceholder')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
         <div>
-          <label className="label" htmlFor="category">Category</label>
+          <label className="label" htmlFor="category">{t('catalog.category')}</label>
           <select id="category" className="input" value={category} onChange={(e) => update({ category: e.target.value })}>
-            <option value="">All categories</option>
+            <option value="">{t('catalog.allCategories')}</option>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="difficulty">Difficulty</label>
+          <label className="label" htmlFor="difficulty">{t('catalog.difficulty')}</label>
           <select id="difficulty" className="input" value={difficulty} onChange={(e) => update({ difficulty: e.target.value })}>
-            <option value="">Any level</option>
-            <option value="beginner">Beginner</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="advanced">Advanced</option>
+            <option value="">{t('catalog.allLevels')}</option>
+            <option value="beginner">{t('catalog.difficulty.beginner')}</option>
+            <option value="intermediate">{t('catalog.difficulty.intermediate')}</option>
+            <option value="advanced">{t('catalog.difficulty.advanced')}</option>
           </select>
         </div>
-        <button type="submit" className="btn-primary">Search</button>
+        <button type="submit" className="btn-primary">{t('common.search')}</button>
       </form>
 
       {query.error && <Alert>{apiErrorMessage(query.error)}</Alert>}
       {query.isLoading ? (
         <div className="flex justify-center py-12"><Spinner /></div>
       ) : query.data?.items?.length === 0 ? (
-        <Card className="text-center text-slate-500">No courses match your filters.</Card>
+        <Card className="text-center text-slate-500">{t('catalog.empty')}</Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {query.data?.items.map((c) => (
@@ -101,7 +103,10 @@ export default function CourseCatalog() {
               </p>
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>{c.instructor_name}</span>
-                <span>{Number(c.price) > 0 ? `$${c.price}` : 'Free'} · {c.enrollment_count ?? 0} enrolled</span>
+                <span>
+                  {Number(c.price) > 0 ? `$${c.price}` : t('catalog.free')} ·{' '}
+                  {t('catalog.enrolledCount', { count: c.enrollment_count ?? 0 })}
+                </span>
               </div>
             </Link>
           ))}
@@ -111,11 +116,13 @@ export default function CourseCatalog() {
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3">
           <button className="btn-secondary" disabled={page <= 1} onClick={() => update({ page: String(page - 1) })}>
-            Previous
+            {t('catalog.previous')}
           </button>
-          <span className="text-sm text-slate-500">Page {page} of {totalPages}</span>
+          <span className="text-sm text-slate-500">
+            {t('catalog.pageOf', { page, total: totalPages })}
+          </span>
           <button className="btn-secondary" disabled={page >= totalPages} onClick={() => update({ page: String(page + 1) })}>
-            Next
+            {t('common.next')}
           </button>
         </div>
       )}

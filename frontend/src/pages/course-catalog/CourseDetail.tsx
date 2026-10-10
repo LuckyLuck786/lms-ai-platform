@@ -6,8 +6,10 @@ import { useAppSelector } from '../../store/hooks';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { Assignment, CourseDetail as CourseDetailType } from '../../utils/types';
 import CourseForum from '../../components/student/CourseForum';
+import { useI18n } from '../../utils/i18n';
 
 export default function CourseDetail() {
+  const { t } = useI18n();
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -49,7 +51,7 @@ export default function CourseDetail() {
           <div>
             <div className="mb-1 flex items-center gap-2">
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs uppercase dark:bg-slate-800">
-                {c.difficulty ?? 'all levels'}
+                {c.difficulty ?? t('course.allLevels')}
               </span>
               <span className={`rounded-full px-2 py-0.5 text-xs uppercase ${
                 c.status === 'approved'
@@ -61,22 +63,23 @@ export default function CourseDetail() {
             </div>
             <h1 className="text-2xl font-bold">{c.title}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              by {c.instructor_name} {c.category ? `· ${c.category}` : ''}
+              {t('course.by', { name: c.instructor_name ?? '' })}
+              {c.category ? ` · ${c.category}` : ''}
             </p>
             <p className="mt-3 max-w-2xl text-slate-600 dark:text-slate-300">{c.description}</p>
           </div>
           <div className="text-right">
-            <div className="mb-2 text-2xl font-bold">{Number(c.price) > 0 ? `$${c.price}` : 'Free'}</div>
+            <div className="mb-2 text-2xl font-bold">{Number(c.price) > 0 ? `$${c.price}` : t('catalog.free')}</div>
             {user?.roles.includes('student') && (
               <button className="btn-primary" disabled={enroll.isPending} onClick={() => enroll.mutate()}>
-                {enroll.isPending ? 'Enrolling…' : 'Enroll now'}
+                {enroll.isPending ? t('catalog.enrolling') : t('course.enrollNow')}
               </button>
             )}
-            {!user && <Link to="/login" className="btn-primary">Log in to enroll</Link>}
+            {!user && <Link to="/login" className="btn-primary">{t('course.loginToEnroll')}</Link>}
             {firstLectureId && (
               <div className="mt-2">
                 <Link to={`/learn/${c.id}/${firstLectureId}`} className="btn-secondary">
-                  ▶ Start learning
+                  {t('course.startLearning')}
                 </Link>
               </div>
             )}
@@ -100,20 +103,22 @@ export default function CourseDetail() {
 
       {/* Quizzes (FR-S7) */}
       {c.modules.some((m) => m.quizzes?.length > 0) && (
-        <section aria-label="Quizzes" className="space-y-3">
-          <h2 className="text-lg font-semibold">Quizzes</h2>
+        <section aria-label={t('course.quizzes')} className="space-y-3">
+          <h2 className="text-lg font-semibold">{t('course.quizzes')}</h2>
           {c.modules.flatMap((m) =>
             (m.quizzes ?? []).map((q) => (
               <Card key={q.id} className="flex items-center justify-between">
                 <div>
                   <span className="font-medium">📝 {q.title}</span>
-                  <span className="ml-2 text-sm text-slate-400">{q.question_count} questions</span>
+                  <span className="ml-2 text-sm text-slate-400">
+                    {t('course.questions', { count: q.question_count })}
+                  </span>
                   <div className="text-xs text-slate-400">{m.title}</div>
                 </div>
                 {user ? (
-                  <Link to={`/quiz/${q.id}`} className="btn-secondary">Open quiz</Link>
+                  <Link to={`/quiz/${q.id}`} className="btn-secondary">{t('course.openQuiz')}</Link>
                 ) : (
-                  <Link to="/login" className="btn-secondary">Log in</Link>
+                  <Link to="/login" className="btn-secondary">{t('course.logIn')}</Link>
                 )}
               </Card>
             )),
@@ -122,19 +127,19 @@ export default function CourseDetail() {
       )}
 
       {/* Assignments (FR-S6) */}
-      <section aria-label="Assignments" className="space-y-3">
-        <h2 className="text-lg font-semibold">Assignments</h2>
+      <section aria-label={t('assignments.title')} className="space-y-3">
+        <h2 className="text-lg font-semibold">{t('assignments.title')}</h2>
         {assignments.data?.items.length === 0 && (
-          <Card className="text-slate-500">No assignments yet.</Card>
+          <Card className="text-slate-500">{t('assignments.noAssignments')}</Card>
         )}
         {assignments.data?.items.map((a) => (
           <AssignmentCard key={a.id} assignment={a} canSubmit={!!user?.roles.includes('student')} />
         ))}
       </section>
 
-      <section aria-label="Course content" className="space-y-4">
-        <h2 className="text-lg font-semibold">Course content</h2>
-        {c.modules.length === 0 && <Card className="text-slate-500">No modules published yet.</Card>}
+      <section aria-label={t('course.courseContent')} className="space-y-4">
+        <h2 className="text-lg font-semibold">{t('course.courseContent')}</h2>
+        {c.modules.length === 0 && <Card className="text-slate-500">{t('course.noModules')}</Card>}
         {c.modules.map((m) => (
           <Card key={m.id}>
             <h3 className="font-semibold">{m.title}</h3>
@@ -143,11 +148,15 @@ export default function CourseDetail() {
                 <li key={l.id} className="flex items-center justify-between py-2 text-sm">
                   <span>🎬 {l.title}</span>
                   <span className="text-xs text-slate-400">
-                    {l.duration_seconds ? `${Math.round(l.duration_seconds / 60)} min` : ''}
+                    {l.duration_seconds
+                      ? t('course.minutes', { count: Math.round(l.duration_seconds / 60) })
+                      : ''}
                   </span>
                 </li>
               ))}
-              {m.lectures.length === 0 && <li className="py-2 text-sm text-slate-400">No lectures yet</li>}
+              {m.lectures.length === 0 && (
+                <li className="py-2 text-sm text-slate-400">{t('course.noLectures')}</li>
+              )}
             </ul>
           </Card>
         ))}
@@ -155,7 +164,8 @@ export default function CourseDetail() {
 
       {isOwner && (
         <p className="text-sm text-slate-400">
-          You own this course. Manage content from the <Link to="/instructor" className="underline">instructor workspace</Link>.
+          {t('course.ownerHint')}{' '}
+          <Link to="/instructor" className="underline">{t('course.instructorWorkspace')}</Link>
         </p>
       )}
     </div>
@@ -164,6 +174,7 @@ export default function CourseDetail() {
 
 /** Assignment row with inline file submission (FR-S6). */
 function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; canSubmit: boolean }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -178,7 +189,7 @@ function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; can
       return data;
     },
     onSuccess: () => {
-      setMsg('Submitted ✓');
+      setMsg(`${t('assignments.submitted')} ✓`);
       setFile(null);
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
@@ -197,14 +208,20 @@ function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; can
           )}
           {assignment.due_date && (
             <p className={`mt-1 text-xs ${late && !assignment.my_submission_id ? 'text-red-500' : 'text-slate-400'}`}>
-              Due {new Date(assignment.due_date).toLocaleString()}
+              {t('assignments.due', { date: new Date(assignment.due_date).toLocaleString() })}
             </p>
           )}
           {assignment.my_submission_id && (
             <p className="mt-1 text-xs text-slate-500">
-              Submitted {assignment.my_submitted_at ? new Date(assignment.my_submitted_at).toLocaleString() : ''}
+              {t('assignments.submittedOn', {
+                date: assignment.my_submitted_at
+                  ? new Date(assignment.my_submitted_at).toLocaleString()
+                  : '',
+              })}
               {assignment.my_grade != null && (
-                <span className="ml-2 font-semibold text-emerald-600">Grade: {assignment.my_grade}</span>
+                <span className="ml-2 font-semibold text-emerald-600">
+                  {t('assignments.gradeLabel', { grade: assignment.my_grade })}
+                </span>
               )}
               {assignment.my_feedback && <span className="ml-2 italic">“{assignment.my_feedback}”</span>}
             </p>
@@ -215,7 +232,7 @@ function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; can
           <div className="flex items-center gap-2">
             <input
               type="file"
-              aria-label={`Upload for ${assignment.title}`}
+              aria-label={t('assignments.uploadFor', { title: assignment.title })}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="text-xs"
             />
@@ -224,7 +241,7 @@ function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; can
               disabled={!file || submit.isPending}
               onClick={() => submit.mutate()}
             >
-              {submit.isPending ? 'Uploading…' : 'Submit'}
+              {submit.isPending ? t('common.uploading') : t('common.submit')}
             </button>
           </div>
         )}

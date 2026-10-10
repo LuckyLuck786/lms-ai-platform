@@ -4,6 +4,7 @@ import { AuthUser } from '../../middleware/auth';
 import { gradeAttempt, QuestionForGrading } from '../../utils/grading';
 import { touchStreak } from '../gamification/gamification.service';
 import { awardBadge } from '../../utils/badges';
+import { queueMasteryRecompute } from '../../jobs/queues';
 import { cacheDel } from '../../db/redis';
 import { CreateQuizInput, SubmitAttemptInput } from './quizzes.schemas';
 
@@ -205,6 +206,8 @@ export async function submitAttempt(user: AuthUser, attemptId: string, input: Su
   if (score !== null && score >= 100) {
     await awardBadge(user.id, 'quiz_perfect_score');
   }
+  // FR-A8: quiz scores feed topic mastery — recompute in the background.
+  await queueMasteryRecompute({ userId: user.id, courseId: course });
 
   return {
     attempt_id: attemptId,

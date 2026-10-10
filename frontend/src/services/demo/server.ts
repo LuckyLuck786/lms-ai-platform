@@ -18,7 +18,17 @@ import {
   DiscussionPostRecord,
   nextId,
 } from './seed';
-import { generateQuizDraft, lectureSummary, moduleFlashcards, studyPlan, tutorReply } from './ai';
+import {
+  averageMastery,
+  generateQuizDraft,
+  lectureSummary,
+  moduleFlashcards,
+  quizDifficulty,
+  resolveDepth,
+  studyPlan,
+  topicMastery,
+  tutorReply,
+} from './ai';
 import { buildCertificatePdf } from './pdf';
 
 /**
@@ -110,6 +120,36 @@ const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : 
 const num = (v: unknown, fallback = 0): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 
+/**
+ * Files submitted under one field name (repeated multipart fields arrive as
+ * an array). Non-File values are ignored.
+ */
+function filesFrom(body: Record<string, unknown>, key: string): File[] {
+  const raw = body[key];
+  const list = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  return list.filter(
+    (v): v is File => Boolean(v) && typeof v === 'object' && 'name' in (v as object),
+  );
+}
+
+/**
+ * Give an uploaded File a URL the demo UI can render. Browsers get a real
+ * object URL; jsdom (tests) gets a stable placeholder.
+ */
+function fileToUrl(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const file = value as File;
+  const label = `#name=${encodeURIComponent(file.name || 'file')}`;
+  if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+    try {
+      return `${URL.createObjectURL(file)}${label}`;
+    } catch {
+      /* fall through to the placeholder */
+    }
+  }
+  return `demo-upload://${file.name || 'file'}${label}`;
+}
+
 const publicUser = ({ password: _pw, is_active: _a, created_at: _c, ...u }: DemoAccount): User => u;
 
 const authResponse = (s: DemoState, account: DemoAccount): AuthResponse => {
@@ -167,6 +207,14 @@ function requireThreadAccess(s: DemoState, user: DemoAccount, threadId: string):
 
 const enrolmentCount = (s: DemoState, courseId: string): number =>
   s.enrollments.filter((e) => e.course_id === courseId).length;
+
+/** Every quiz that belongs to one of the course's modules. */
+const stateQuizzesForCourse = (s: DemoState, courseId: string): Quiz[] => {
+  const course = s.courses.find((c) => c.id === courseId);
+  if (!course) return [];
+  const moduleIds = new Set(course.modules.map((m) => m.id));
+  return s.quizzes.filter((q) => moduleIds.has(q.module_id));
+};
 
 /** Strip the nested collections the list endpoint never returns. */
 function courseListItem(s: DemoState, c: CourseDetail): Course {
@@ -492,18 +540,45 @@ route('POST', '/modules/:moduleId/lectures', ({ state: s, params, body }) => {
   if (!title) throw new HttpError(422, 'VALIDATION', 'Lecture title is required');
 
   const mod = owner.modules.find((m) => m.id === params.moduleId)!;
+
+  // Multipart uploads (FR-I2): `video` plus up to 10 `resources` files.
+  const video = filesFrom(body, 'video')[0];
+  const resources = filesFrom(body, 'resources');
+
   const lecture: Lecture = {
     id: nextId('l'),
     module_id: mod.id,
     title,
-    video_url: str(body.video_url) || null,
+    video_url: fileToUrl(video) ?? str(body.video_url) ?? null,
     transcript: str(body.transcript).trim() || null,
     duration_seconds: num(body.duration_seconds) || null,
     order_index: mod.lectures.length,
-    resource_urls: null,
+    resource_urls: resources.length ? resources.map((f) => fileToUrl(f) as string) : null,
   };
   mod.lectures.push(lecture);
   return lecture;
+});
+
+route('POST', '/lectures/:lectureId/resources', ({ state: s, params, body }) => {
+  const user = requireRole(s, 'instructor', 'admin');
+  const found = findLecture(s, params.lectureId);
+  requireCourseOwner(s, user, found.course.id);
+
+  const files = filesFrom(body, 'resources');
+  if (!files.length) {
+    throw new HttpError(422, 'VALIDATION', 'Attach at least one file in the resources field');
+  }
+
+  const added = files.map((f) => ({
+    url: fileToUrl(f) as string,
+    name: f.name,
+    size: f.size,
+  }));
+  found.lecture.resource_urls = [
+    ...(found.lecture.resource_urls ?? []),
+    ...added.map((a) => a.url),
+  ];
+  return { id: found.lecture.id, resource_urls: found.lecture.resource_urls, added };
 });
 
 route('GET', '/courses/:id/announcements', ({ state: s, params }) => {
@@ -532,6 +607,107 @@ route('POST', '/courses/:id/announcements', ({ state: s, params, body }) => {
 });
 
 // --- enrollments, progress, notes, bookmarks -------------------------------
+
+/**
+ * GET /courses/:id/analytics — instructor analytics (FR-I5): overview KPIs,
+ * per-lecture drop-off and per-quiz averages. Owner or admin only, exactly
+ * like `requireOwnedCourse` in courses.service.
+ */
+route('GET', '/courses/:id/analytics', ({ state: s, params }) => {
+  const user = requireUser(s);
+  const course = requireCourseOwner(s, user, params.id);
+
+  const round1 = (n: number): number => Math.round(n * 10) / 10;
+  const round2 = (n: number): number => Math.round(n * 100) / 100;
+  const rate = (part: number, whole: number): number =>
+    whole > 0 ? Math.round(Math.min(1, Math.max(0, part / whole)) * 10000) / 100 : 0;
+
+  const enrolled = s.enrollments.filter((e) => e.course_id === course.id);
+  const progressPercents = enrolled.map((e) => Number(e.progress_percent));
+
+  // Progress rows are keyed `${userId}:${lectureId}` — index them per lecture.
+  const byLecture = new Map<string, { watched: number; completed: boolean }[]>();
+  for (const [key, value] of Object.entries(s.progress)) {
+    const idx = key.indexOf(':');
+    const lectureId = key.slice(idx + 1);
+    const rows = byLecture.get(lectureId) ?? [];
+    rows.push({ watched: value.watched_seconds, completed: value.completed });
+    byLecture.set(lectureId, rows);
+  }
+
+  const courseQuizIds = new Set(
+    stateQuizzesForCourse(s, course.id).map((q) => q.id),
+  );
+  const submitted = s.attempts.filter(
+    (a) => courseQuizIds.has(a.quiz_id) && a.score !== null,
+  );
+  const watchSeconds = Object.entries(s.progress).reduce((sum, [key]) => {
+    const userId = key.slice(0, key.indexOf(':'));
+    return enrolled.some((e) => e.user_id === userId)
+      ? sum + s.progress[key].watched_seconds
+      : sum;
+  }, 0);
+
+  const lectureStats = course.modules.flatMap((m) =>
+    (m.lectures ?? []).map((lecture) => {
+      const rows = byLecture.get(lecture.id) ?? [];
+      const learners = rows.length;
+      const completions = rows.filter((r) => r.completed).length;
+      const avgWatched = learners
+        ? rows.reduce((sum, r) => sum + r.watched, 0) / learners
+        : 0;
+      const duration = lecture.duration_seconds ?? 0;
+      const completionRate = rate(completions, learners);
+      return {
+        id: lecture.id,
+        title: lecture.title,
+        module_title: m.title,
+        duration_seconds: duration,
+        learners,
+        completions,
+        avg_watched_seconds: round1(avgWatched),
+        completion_rate: completionRate,
+        watched_percent: rate(Math.min(avgWatched, duration), duration),
+        drop_off_percent: learners > 0 ? Math.round((100 - completionRate) * 100) / 100 : 0,
+      };
+    }),
+  );
+
+  const quizzes = stateQuizzesForCourse(s, course.id).map((q) => {
+    const rows = s.attempts.filter((a) => a.quiz_id === q.id && a.score !== null);
+    const avg = rows.length
+      ? rows.reduce((sum, a) => sum + (a.score ?? 0), 0) / rows.length
+      : 0;
+    const module = course.modules.find((m) => m.id === q.module_id);
+    return {
+      id: q.id,
+      title: q.title,
+      module_title: module?.title ?? '',
+      attempts: rows.length,
+      learners: new Set(rows.map((r) => r.user_id)).size,
+      avg_score: round2(avg),
+    };
+  });
+
+  return {
+    course_id: course.id,
+    overview: {
+      enrollments: enrolled.length,
+      active_learners: progressPercents.filter((p) => p > 0).length,
+      completion_rate: rate(progressPercents.filter((p) => p >= 100).length, enrolled.length),
+      avg_progress_percent: progressPercents.length
+        ? round1(progressPercents.reduce((sum, p) => sum + p, 0) / progressPercents.length)
+        : 0,
+      avg_quiz_score: submitted.length
+        ? round2(submitted.reduce((sum, a) => sum + (a.score ?? 0), 0) / submitted.length)
+        : 0,
+      attempts: submitted.length,
+      watch_hours: round2(watchSeconds / 3600),
+    },
+    lectures: lectureStats,
+    quizzes,
+  };
+});
 
 route('GET', '/enrollments/me', ({ state: s }) => {
   const user = requireUser(s);
@@ -856,6 +1032,23 @@ route('PUT', '/notifications/:id/read', ({ state: s, params }) => {
   return rest;
 });
 
+// --- topic mastery (FR-A8) ------------------------------------------------
+
+/**
+ * GET /users/me/mastery?course_id= — per-module mastery rows with the
+ * difficulty band each score maps to. With `course_id` the rows are computed
+ * for that course; without it, every enrolled course is returned.
+ */
+route('GET', '/users/me/mastery', ({ state: s, query }) => {
+  const user = requireUser(s);
+  const courseId = str(query.course_id);
+  if (courseId) return { items: topicMastery(s, user.id, courseId) };
+  const items = s.enrollments
+    .filter((e) => e.user_id === user.id)
+    .flatMap((e) => topicMastery(s, user.id, e.course_id));
+  return { items };
+});
+
 // --- discussions -----------------------------------------------------------
 
 const threadView = (t: DiscussionThread, s: DemoState) => ({
@@ -1044,7 +1237,11 @@ route('POST', '/ai/chat/sessions/:id/messages', ({ state: s, params, body }) => 
   });
 
   const course = findCourse(s, session.course_id);
-  const { reply, sources, mode } = tutorReply(course, message, session.mode);
+  // FR-A8: "auto" adapts the depth to stored mastery, like the FastAPI service.
+  const rows = topicMastery(s, user.id, session.course_id);
+  const depth =
+    session.mode === 'auto' ? resolveDepth(averageMastery(rows)) : session.mode;
+  const { reply, sources } = tutorReply(course, message, depth);
   s.messages.push({
     id: nextId('cm'),
     session_id: session.id,
@@ -1054,7 +1251,7 @@ route('POST', '/ai/chat/sessions/:id/messages', ({ state: s, params, body }) => 
     created_at: new Date().toISOString(),
   });
 
-  return { reply, sources, mode };
+  return { reply, sources, mode: session.mode, depth };
 });
 
 route('PUT', '/ai/chat/sessions/:id/mode', ({ state: s, params, body }) => {
@@ -1064,8 +1261,8 @@ route('PUT', '/ai/chat/sessions/:id/mode', ({ state: s, params, body }) => {
     throw new HttpError(404, 'NOT_FOUND', 'Chat session not found');
   }
   const mode = str(body.mode);
-  if (!['beginner', 'intermediate', 'advanced'].includes(mode)) {
-    throw new HttpError(422, 'VALIDATION', 'mode must be beginner, intermediate or advanced');
+  if (!['beginner', 'intermediate', 'advanced', 'auto'].includes(mode)) {
+    throw new HttpError(422, 'VALIDATION', 'mode must be beginner, intermediate, advanced or auto');
   }
   session.mode = mode;
   return { id: session.id, mode };
@@ -1077,10 +1274,22 @@ route('POST', '/ai/lectures/:id/summarize', ({ state: s, params }) => {
   return lectureSummary(lecture);
 });
 
-route('POST', '/ai/lectures/:id/generate-quiz', ({ state: s, params }) => {
-  requireUser(s);
+route('POST', '/ai/lectures/:id/generate-quiz', ({ state: s, params, body }) => {
+  const user = requireUser(s);
   const { course, lecture } = findLecture(s, params.id);
-  return generateQuizDraft(s, course, lecture);
+  // Difficulty: explicit override > mastery-derived > intermediate (FR-A8).
+  const requested = str(body.difficulty).toLowerCase();
+  const difficulty = ['beginner', 'intermediate', 'advanced'].includes(requested)
+    ? (requested as 'beginner' | 'intermediate' | 'advanced')
+    : quizDifficulty(s, user.id, course.id, lecture.module_id);
+  const draft = generateQuizDraft(s, course, lecture);
+  const quiz = s.quizzes.find((q) => q.id === draft.quiz_id);
+  return {
+    ...draft,
+    title: quiz?.title ?? `${lecture.title} — AI draft`,
+    is_ai_generated: true,
+    difficulty,
+  };
 });
 
 route('POST', '/ai/modules/:id/flashcards', ({ state: s, params }) => {
@@ -1309,10 +1518,21 @@ export const demoAdapter: AxiosAdapter = async (
       }
     } else if (config.data && typeof config.data === 'object') {
       const payload = config.data as FormData;
-      body =
-        typeof FormData !== 'undefined' && payload instanceof FormData
-          ? { file: payload.get('file') ?? undefined }
-          : (config.data as Record<string, unknown>);
+      if (typeof FormData !== 'undefined' && payload instanceof FormData) {
+        // Multipart: flatten every field, keeping File values (repeated field
+        // names collapse into an array) so handlers can read `video` /
+        // `resources` as well as the single `file` used by submissions.
+        const flattened: Record<string, unknown> = {};
+        payload.forEach((value, key) => {
+          const existing = flattened[key];
+          if (existing === undefined) flattened[key] = value;
+          else if (Array.isArray(existing)) existing.push(value);
+          else flattened[key] = [existing, value];
+        });
+        body = flattened;
+      } else {
+        body = config.data as Record<string, unknown>;
+      }
     }
 
     const data = matched.handler({ state, method, path, params: matched.params, query, body });

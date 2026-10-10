@@ -82,6 +82,10 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile app up --bu
 - [x] Frontend: course player, quiz-taking UI, inline assignment submission,
       real streak/badges/certificates on dashboard, instructor content tools
       (modules, lectures, quiz builder, assignments)
+- [x] Instructor analytics: per-course overview KPIs (enrolments, completion,
+      avg. progress/quiz score, watch hours), per-lecture drop-off table and
+      per-quiz averages — `GET /courses/:id/analytics`, owner-or-admin
+      (FR-I5, `tests/analytics.test.ts`, dashboard section on `/instructor`)
 - [x] `scripts/smoke.sh` + `scripts/smoke-phase2.sh` end-to-end verification
 
 Roadmap: all four phases implemented — see the status sections above.
@@ -130,15 +134,23 @@ Demo accounts (after `npm run seed`): `admin@vertexon.demo`,
 - [x] RAG chat: course-filtered cosine retrieval → mode-aware prompt → Claude,
       replies persisted with lecture citations (title + estimated timestamp);
       20 req/min/user rate limit enforced at the Node proxy
-- [x] Difficulty modes: beginner / intermediate / advanced (`PUT .../mode`)
-- [x] Lecture summaries, AI quiz drafts (is_ai_generated, instructor review),
-      module flashcards, rule-based study plans from quiz history
+- [x] Difficulty modes: beginner / intermediate / advanced (`PUT .../mode`),
+      plus an **adaptive** mode that resolves the depth from topic mastery
+- [x] Topic mastery tracking (FR-A8): `topic_mastery` rows (quiz average 70% +
+      lecture completion 30%) recomputed by a background `mastery` BullMQ queue
+      after quiz submissions, lecture completions and tutor interactions;
+      exposed at `GET /users/me/mastery?course_id=`, surfaced as progress bars
+      in the player's AI tools, fed into adaptive chat prompts and into
+      auto-generated quiz difficulty (`tests/mastery.test.ts`)
+- [x] Lecture summaries, AI quiz drafts (is_ai_generated, instructor review,
+      mastery-derived difficulty), module flashcards, rule-based study plans
+      from quiz history
 - [x] Recommendation engine: quiz-performance signals + embedding similarity
       over candidate courses, persisted to the `recommendations` table
 - [x] Frontend: AI tutor chat panel with citation chips + mode switcher,
       AI tools (summarize / flashcards / quiz draft / study plan) in the player,
       “Recommended for you” widget on the dashboard
-- [x] `scripts/smoke-phase3.sh` end-to-end verification; `pytest` (7 tests)
+- [x] `scripts/smoke-phase3.sh` end-to-end verification; `pytest` (34 tests)
 
 ### LLM providers
 
@@ -146,8 +158,8 @@ The AI service picks a provider automatically, in this order:
 
 | Priority | Provider | Default model | Notes |
 |---|---|---|---|
-| 1 | **Groq** (`GROQ_API_KEY`) | `llama-3.3-70b-versatile` | free tier, fastest |
-| 2 | **Gemini** (`GEMINI_API_KEY`) | `gemini-2.0-flash` | free tier; also powers embeddings (`text-embedding-004`, zero-padded to 1536 — cosine-preserving) |
+| 1 | **Groq** (`GROQ_API_KEY`) | `openai/gpt-oss-120b` | free tier, fastest |
+| 2 | **Gemini** (`GEMINI_API_KEY`) | `gemini-2.5-flash` | free tier; also powers embeddings (`gemini-embedding-001`, 1536 dims) |
 | 3 | Anthropic (`ANTHROPIC_API_KEY`) | `claude-sonnet-4-5` | paid |
 
 Set any key in `.env` and chat/summaries/quiz-gen/flashcards switch from the
@@ -167,7 +179,9 @@ cd ai-service && python3 -m venv .venv && .venv/bin/pip install -r requirements.
 
 Dev runs queue workers in-process (`DISABLE_INLINE_WORKER=1` to opt out).
 In production run `npm run worker` alongside the API. Streak evaluation is a
-repeatable BullMQ job (03:00 UTC); certificate PDFs generate async on demand.
+repeatable BullMQ job (03:00 UTC); certificate PDFs generate async on demand;
+topic-mastery recomputes are deduplicated per user+course on the `mastery`
+queue.
 
 ## Demo mode (no backend required)
 
@@ -217,3 +231,31 @@ bash scripts/smoke-phase2.sh   # Phase 2: progress, quizzes, assignments, certif
 bash scripts/smoke-phase3.sh   # Phase 3: ingestion, RAG chat, AI generation (needs ai-service)
 bash scripts/smoke-phase4.sh   # Phase 4: admin, forum, moderation, notifications
 ```
+
+## Cloud deployment
+
+The full stack deploys as two free Render web services (`render.yaml` blueprint)
+plus Neon (Postgres + pgvector) and Upstash (Redis), with the frontend on
+Vercel — step-by-step instructions, env vars and post-deploy RAG ingestion are
+in [docs/deploy.md](docs/deploy.md).
+
+## Known deferrals
+
+Scoped out of the 4-week build and documented deliberately:
+
+- **Video transcription (PRD §9.3 Whisper job).** Every lecture ships with a
+  seeded transcript and there are no raw video uploads to transcribe, so an
+  STT worker would have no input. The ingestion queue (`triggerIngestion`,
+  `POST /api/v1/ai/internal/ingest`) is where a speech-to-text step plugs in
+  when real uploads arrive.
+- **Object storage (S3/MinIO).** Uploads persist on local disk behind
+  `backend/src/utils/storage.ts` (`persistFile`), served from `/uploads` — the
+  single seam where an S3 driver drops in for cloud hosting.
+- **SMTP provider credentials.** Email is code-complete (nodemailer, pooling,
+  template rendering); locally `SMTP_URL=smtp://localhost:1025` delivers to the
+  Mailpit web inbox, otherwise messages are logged as structured dry-runs.
+  Production just needs a real `smtp://` URL (Resend/Brevo/SES/Gmail app
+  password) — no code changes.
+- **i18n depth** stays scaffolding (nav + core UI strings in EN/ES/HI), per
+  PRD §3.2; **load testing** and **monitoring** (k6, Prometheus/Grafana) are
+  ops tasks for the deploy environment, not the codebase.

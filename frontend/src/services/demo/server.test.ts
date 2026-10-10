@@ -14,10 +14,14 @@ async function call<T = any>(
   url: string,
   data?: unknown,
 ): Promise<{ status: number; data: T }> {
+  const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
   const config = {
     method,
     url,
-    data: typeof data === 'string' || data === undefined ? data : JSON.stringify(data),
+    data:
+      data === undefined || typeof data === 'string' || isFormData
+        ? data
+        : JSON.stringify(data),
     headers: {},
   } as unknown as AxiosRequestConfig;
 
@@ -387,5 +391,199 @@ describe('demo backend', () => {
       await expectError(() => call('GET', '/nope'), 404, 'NOT_FOUND');
       await expectError(() => call('DELETE', '/courses/c-rag'), 405, 'METHOD_NOT_ALLOWED');
     });
+  });
+});
+
+/**
+ * FR-I2: instructors upload video + slide/PDF material. The demo backend has
+ * to honour multipart bodies so the deployed demo behaves like the real API.
+ */
+describe('demo backend — lecture material uploads (FR-I2)', () => {
+  beforeEach(() => {
+    resetDemoState();
+  });
+
+  const file = (name: string, type = 'application/pdf') =>
+    new File(['dummy bytes'], name, { type });
+
+  async function createCourseWithModule() {
+    await login('instructor@vertexon.demo');
+    const course: any = (
+      await call('POST', '/courses', {
+        title: 'Upload verification',
+        description: 'checks multipart handling',
+        category: 'Computer Science',
+        difficulty: 'beginner',
+        price: 0,
+      })
+    ).data;
+    const mod: any = (await call('POST', `/courses/${course.id}/modules`, { title: 'Module 1' })).data;
+    return { course, mod };
+  }
+
+  it('stores a video and slide deck attached at lecture creation', async () => {
+    const { mod } = await createCourseWithModule();
+
+    const form = new FormData();
+    form.append('title', 'Indexes in depth');
+    form.append('video', file('clip.mp4', 'video/mp4'));
+    form.append('resources', file('slides deck.pdf'));
+    form.append('resources', file('notes.txt', 'text/plain'));
+
+    const lecture: any = (await call('POST', `/modules/${mod.id}/lectures`, form)).data;
+
+    expect(lecture.title).toBe('Indexes in depth');
+    expect(decodeURIComponent(lecture.video_url)).toContain('clip.mp4');
+    expect(lecture.resource_urls).toHaveLength(2);
+    // The original filename rides along in the fragment so the UI can label it.
+    expect(decodeURIComponent(lecture.resource_urls[0])).toContain('slides deck.pdf');
+  });
+
+  it('attaches material to an existing lecture', async () => {
+    const { mod } = await createCourseWithModule();
+    const lecture: any = (
+      await call('POST', `/modules/${mod.id}/lectures`, { title: 'Existing lecture' })
+    ).data;
+    expect(lecture.resource_urls).toBeNull();
+
+    const form = new FormData();
+    form.append('resources', file('appendix.pdf'));
+    const result: any = (await call('POST', `/lectures/${lecture.id}/resources`, form)).data;
+
+    expect(result.added).toHaveLength(1);
+    expect(result.resource_urls).toHaveLength(1);
+  });
+
+  it('rejects an upload with no files', async () => {
+    const { mod } = await createCourseWithModule();
+    const lecture: any = (
+      await call('POST', `/modules/${mod.id}/lectures`, { title: 'Empty upload target' })
+    ).data;
+
+    await expectError(
+      () => call('POST', `/lectures/${lecture.id}/resources`, new FormData()),
+      422,
+      'VALIDATION',
+    );
+  });
+
+  it('refuses uploads from a student', async () => {
+    const { mod } = await createCourseWithModule();
+    const lecture: any = (
+      await call('POST', `/modules/${mod.id}/lectures`, { title: 'Protected lecture' })
+    ).data;
+
+    await login('student@vertexon.demo');
+    const form = new FormData();
+    form.append('resources', file('sneaky.pdf'));
+    await expectError(() => call('POST', `/lectures/${lecture.id}/resources`, form), 403, 'FORBIDDEN');
+  });
+});
+
+describe('instructor analytics (FR-I5)', () => {
+  beforeEach(() => {
+    resetDemoState();
+  });
+
+  it('is limited to the course owner or an admin', async () => {
+    await login('student@vertexon.demo');
+    await expectError(() => call('GET', '/courses/c-sql/analytics'), 403, 'FORBIDDEN');
+
+    await login('instructor2@vertexon.demo'); // owns c-sql
+    const { status } = await call('GET', '/courses/c-sql/analytics');
+    expect(status).toBe(200);
+  });
+
+  it('returns overview KPIs, per-lecture drop-off and per-quiz averages', async () => {
+    await login('instructor2@vertexon.demo');
+    const { data } = await call<any>('GET', '/courses/c-sql/analytics');
+
+    expect(data.course_id).toBe('c-sql');
+    expect(data.overview).toMatchObject({
+      enrollments: expect.any(Number),
+      active_learners: expect.any(Number),
+      completion_rate: expect.any(Number),
+      avg_progress_percent: expect.any(Number),
+      avg_quiz_score: expect.any(Number),
+      attempts: expect.any(Number),
+      watch_hours: expect.any(Number),
+    });
+    expect(data.overview.enrollments).toBeGreaterThan(0);
+
+    expect(data.lectures.length).toBeGreaterThan(0);
+    for (const lec of data.lectures) {
+      expect(lec.drop_off_percent).toBeGreaterThanOrEqual(0);
+      expect(lec.drop_off_percent).toBeLessThanOrEqual(100);
+      expect(typeof lec.duration_seconds).toBe('number');
+      expect(lec.module_title).toBeTruthy();
+    }
+
+    for (const quiz of data.quizzes) {
+      expect(quiz.avg_score).toBeGreaterThanOrEqual(0);
+      expect(quiz.attempts).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+describe('topic mastery (FR-A8)', () => {
+  beforeEach(() => {
+    resetDemoState();
+  });
+
+  const studentCourse = async (): Promise<string> => {
+    await login('student@vertexon.demo');
+    const { data } = await call<any>('GET', '/enrollments/me');
+    return data.items[0].course_id as string;
+  };
+
+  it('returns one row per module with scores and a difficulty band', async () => {
+    const courseId = await studentCourse();
+    const { data } = await call<any>('GET', `/users/me/mastery?course_id=${courseId}`);
+
+    expect(data.items.length).toBeGreaterThan(0);
+    const row = data.items[0];
+    expect(row.course_id).toBe(courseId);
+    expect(Number(row.mastery_score)).toBeGreaterThanOrEqual(0);
+    expect(Number(row.mastery_score)).toBeLessThanOrEqual(100);
+    expect(['beginner', 'intermediate', 'advanced']).toContain(row.depth);
+    expect(typeof row.completion_percent).toBe('string'); // numeric-as-string, like pg
+  });
+
+  it('requires a signed-in user', async () => {
+    await expectError(() => call('GET', '/users/me/mastery'), 401, 'UNAUTHENTICATED');
+  });
+
+  it('resolves the reply depth for an auto-mode session', async () => {
+    const courseId = await studentCourse();
+    const created = await call<any>('POST', '/ai/chat/sessions', { course_id: courseId });
+    const sid = created.data.id;
+
+    await expectError(
+      () => call('PUT', `/ai/chat/sessions/${sid}/mode`, { mode: 'wizard' }),
+      422,
+      'VALIDATION',
+    );
+
+    await call('PUT', `/ai/chat/sessions/${sid}/mode`, { mode: 'auto' });
+    const { data } = await call<any>('POST', `/ai/chat/sessions/${sid}/messages`, {
+      message: 'Give me the big picture of this course.',
+    });
+    expect(data.mode).toBe('auto');
+    expect(['beginner', 'intermediate', 'advanced']).toContain(data.depth);
+  });
+
+  it('honours an explicit quiz difficulty, else derives it from mastery', async () => {
+    const courseId = await studentCourse();
+    const detail = await call<any>('GET', `/courses/${courseId}`);
+    const lectureId = detail.data.modules[0].lectures[0].id;
+
+    const explicit = await call<any>('POST', `/ai/lectures/${lectureId}/generate-quiz`, {
+      difficulty: 'advanced',
+    });
+    expect(explicit.data.difficulty).toBe('advanced');
+    expect(explicit.data.is_ai_generated).toBe(true);
+
+    const derived = await call<any>('POST', `/ai/lectures/${lectureId}/generate-quiz`, {});
+    expect(['beginner', 'intermediate', 'advanced']).toContain(derived.data.difficulty);
   });
 });

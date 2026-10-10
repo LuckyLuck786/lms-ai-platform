@@ -6,6 +6,7 @@ import { Alert, Card, ProgressBar, Spinner } from '../../components/common/ui';
 import { Bookmark, CourseDetail, Enrollment, Lecture, LectureProgress, Note } from '../../utils/types';
 import AiTutorPanel from '../../components/ai-tutor/AiTutorPanel';
 import AiTools from '../../components/ai-tutor/AiTools';
+import { useI18n } from '../../utils/i18n';
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 const SAVE_INTERVAL_MS = 10_000;
@@ -16,11 +17,48 @@ const fmt = (s: number) => {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
+const RESOURCE_ICONS: Record<string, string> = {
+  pdf: '📄',
+  ppt: '📊',
+  pptx: '📊',
+  doc: '📝',
+  docx: '📝',
+  xls: '📈',
+  xlsx: '📈',
+  zip: '🗜️',
+  txt: '🗒️',
+  md: '🗒️',
+  png: '🖼️',
+  jpg: '🖼️',
+  jpeg: '🖼️',
+  mp4: '🎬',
+};
+
+/**
+ * Friendly label for an uploaded resource.
+ *
+ * Files are stored as "<uuid>-<slug>.<ext>", so the random prefix is dropped.
+ * Demo-mode uploads are blob URLs and carry the original name in the hash.
+ */
+export function resourceLabel(url: string): string {
+  const hashName = /#name=([^&]+)/.exec(url);
+  if (hashName) return decodeURIComponent(hashName[1]);
+  const segment = url.split('?')[0].split('#')[0].split('/').pop() ?? url;
+  const withoutId = segment.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-?/i, '');
+  return decodeURIComponent(withoutId || segment);
+}
+
+function resourceIcon(url: string): string {
+  const ext = url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? '';
+  return RESOURCE_ICONS[ext] ?? '📎';
+}
+
 /**
  * Course player (FR-S4/S5): resume-from-position, playback speed,
  * timestamped notes and bookmarks, watched-seconds reporting.
  */
 export default function CoursePlayer() {
+  const { t } = useI18n();
   const { courseId = '', lectureId = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -164,7 +202,7 @@ export default function CoursePlayer() {
 
   if (course.isLoading) return <div className="flex justify-center py-12"><Spinner /></div>;
   if (course.error) return <Alert>{apiErrorMessage(course.error)}</Alert>;
-  if (!lecture) return <Alert>Lecture not found in this course.</Alert>;
+  if (!lecture) return <Alert>{t('player.lectureNotFound')}</Alert>;
 
   const next = flatLectures[currentIndex + 1];
 
@@ -191,13 +229,13 @@ export default function CoursePlayer() {
           </video>
         ) : (
           <Card className="aspect-video flex flex-col items-center justify-center text-slate-500">
-            <p className="mb-2">🎬 No video uploaded yet — read the transcript below.</p>
+            <p className="mb-2">🎬 {t('player.noVideo')}</p>
             <p className="max-w-xl text-sm">{lecture.transcript ?? ''}</p>
           </Card>
         )}
 
         <div className="flex flex-wrap items-center gap-3">
-          <label htmlFor="speed" className="text-sm text-slate-500">Speed</label>
+          <label htmlFor="speed" className="text-sm text-slate-500">{t('player.speed')}</label>
           <select
             id="speed"
             className="input w-24"
@@ -206,39 +244,65 @@ export default function CoursePlayer() {
           >
             {SPEEDS.map((s) => <option key={s} value={s}>{s}x</option>)}
           </select>
-          <button className="btn-secondary" onClick={addBookmark}>🔖 Bookmark this moment</button>
-          <button className="btn-secondary" onClick={markComplete}>✓ Mark as complete</button>
+          <button className="btn-secondary" onClick={addBookmark}>🔖 {t('player.bookmark')}</button>
+          <button className="btn-secondary" onClick={markComplete}>✓ {t('player.markComplete')}</button>
           {next && (
             <button className="btn-primary" onClick={() => navigate(`/learn/${courseId}/${next.id}`)}>
-              Next lecture →
+              {t('player.nextLecture')}
             </button>
           )}
           {progress.data && (
             <span className="text-xs text-slate-400">
-              {progress.data.completed ? 'Completed ✓' : `Resume at ${fmt(progress.data.watched_seconds)}`}
+              {progress.data.completed
+                ? t('player.completed')
+                : t('player.resumeAt', { time: fmt(progress.data.watched_seconds) })}
             </span>
           )}
         </div>
 
+        {/* Instructor-uploaded material (FR-I2) */}
+        {lecture.resource_urls && lecture.resource_urls.length > 0 && (
+          <Card>
+            <h2 className="mb-3 font-semibold">📎 {t('player.material')}</h2>
+            <ul className="space-y-2">
+              {lecture.resource_urls.map((url) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-sm text-brand-600 hover:underline"
+                  >
+                    <span aria-hidden="true">{resourceIcon(url)}</span>
+                    <span>{resourceLabel(url)}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
         {/* AI tutor + generation tools (Phase 3) */}
       <div className="grid gap-4 lg:grid-cols-2">
         <AiTutorPanel courseId={courseId} />
-        <AiTools lectureId={lectureId} moduleId={lecture.module_id} />
+        <AiTools lectureId={lectureId} moduleId={lecture.module_id} courseId={courseId} />
       </div>
 
       {/* Notes */}
         <Card>
-          <h2 className="mb-3 font-semibold">Timestamped notes</h2>
+          <h2 className="mb-3 font-semibold">{t('player.notes')}</h2>
           <div className="mb-3 flex gap-2">
             <input
               className="input flex-1"
-              placeholder="Note at current time…"
+              placeholder={t('player.notePlaceholder')}
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addNote()}
-              aria-label="New note"
+              aria-label={t('player.newNote')}
             />
-            <button className="btn-primary" onClick={addNote} disabled={!noteDraft.trim()}>Add</button>
+            <button className="btn-primary" onClick={addNote} disabled={!noteDraft.trim()}>
+              {t('common.add')}
+            </button>
           </div>
           <ul className="space-y-2">
             {notes.data?.items.map((n) => (
@@ -250,32 +314,36 @@ export default function CoursePlayer() {
                   {fmt(n.timestamp_seconds)}
                 </button>
                 <span className="flex-1">{n.content}</span>
-                <button aria-label="Delete note" className="text-slate-400 hover:text-red-500" onClick={() => deleteNote(n.id)}>✕</button>
+                <button aria-label={t('player.deleteNote')} className="text-slate-400 hover:text-red-500" onClick={() => deleteNote(n.id)}>✕</button>
               </li>
             ))}
-            {notes.data?.items.length === 0 && <li className="text-sm text-slate-400">No notes yet.</li>}
+            {notes.data?.items.length === 0 && (
+              <li className="text-sm text-slate-400">{t('player.noNotes')}</li>
+            )}
           </ul>
         </Card>
 
         {/* Bookmarks */}
         <Card>
-          <h2 className="mb-3 font-semibold">Bookmarks</h2>
+          <h2 className="mb-3 font-semibold">{t('player.bookmarks')}</h2>
           <ul className="flex flex-wrap gap-2">
             {bookmarks.data?.items.map((b) => (
               <li key={b.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs dark:bg-slate-800">
                 <button className="font-mono hover:underline" onClick={() => seekTo(b.timestamp_seconds)}>
                   ⏱ {fmt(b.timestamp_seconds)}
                 </button>
-                <button aria-label="Remove bookmark" className="text-slate-400 hover:text-red-500" onClick={() => deleteBookmark(b.id)}>✕</button>
+                <button aria-label={t('player.removeBookmark')} className="text-slate-400 hover:text-red-500" onClick={() => deleteBookmark(b.id)}>✕</button>
               </li>
             ))}
-            {bookmarks.data?.items.length === 0 && <li className="text-sm text-slate-400">No bookmarks yet.</li>}
+            {bookmarks.data?.items.length === 0 && (
+              <li className="text-sm text-slate-400">{t('player.noBookmarks')}</li>
+            )}
           </ul>
         </Card>
       </div>
 
       {/* Sidebar: course outline */}
-      <aside aria-label="Course outline" className="space-y-3">
+      <aside aria-label={t('player.courseOutline')} className="space-y-3">
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-semibold">{course.data?.title}</h2>

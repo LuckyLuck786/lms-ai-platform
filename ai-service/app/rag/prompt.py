@@ -16,16 +16,23 @@ MODE_INSTRUCTIONS = {
 }
 
 
-def build_system_prompt(course_title: str, mode: str, context_blocks: list[str]) -> str:
+def build_system_prompt(
+    course_title: str,
+    mode: str,
+    context_blocks: list[str],
+    extra_guidance: str = "",
+) -> str:
     context = "\n\n".join(context_blocks) or "(no course material was retrieved)"
     depth = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["intermediate"])
+    guidance = f"{extra_guidance}\n" if extra_guidance.strip() else ""
     return (
         f"You are the AI tutor for the course “{course_title}”. "
         f"Answer ONLY using the CONTEXT excerpts below — never invent facts that are not there. "
         f"If the context does not contain the answer, say that this isn't covered by the course "
         f"material yet and suggest which lecture might be relevant. "
         f"When you use a lecture, mention its title so the learner can find it. "
-        f"{depth}\n\n"
+        f"{depth}\n"
+        f"{guidance}\n"
         f"CONTEXT:\n{context}"
     )
 

@@ -38,6 +38,25 @@ services:
       retries: 10
     restart: unless-stopped
 
+  mailpit:
+    # Local transactional email (PRD §9.3): SMTP on 1025 for the backend,
+    # catch-all web inbox on 8025. Production points SMTP_URL at a real
+    # provider instead — the backend code path is identical.
+    image: axllent/mailpit:latest
+    container_name: lms-mailpit
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   minio:
     # Opt-in until video/certificate uploads (Phase 2): `--profile storage up`
     profiles: ["storage"]

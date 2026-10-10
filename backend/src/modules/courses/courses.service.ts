@@ -3,6 +3,7 @@ import { triggerIngestion } from '../ai/ai.router';
 import { cacheDel, cacheGet, cacheSet } from '../../db/redis';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/errors';
 import { AuthUser, hasRole } from '../../middleware/auth';
+import { completionRate, decorateLectureStat, LectureStatRow } from './analytics';
 import {
   ApproveCourseInput,
   CatalogQuery,
@@ -146,6 +147,100 @@ async function getOwnedCourse(courseId: string, user: AuthUser, adminOverride = 
   const allowed = course.instructor_id === user.id || (adminOverride && hasRole(user, 'admin'));
   if (!allowed) throw forbidden('You do not own this course');
   return course;
+}
+
+/**
+ * GET /courses/:id/analytics — instructor analytics dashboard (FR-I5):
+ * per-lecture drop-off, average quiz scores, and time-on-task, scoped to the
+ * course owner (or an admin).
+ */
+export async function getCourseAnalytics(user: AuthUser, courseId: string) {
+  await getOwnedCourse(courseId, user);
+
+  const overview = await queryOne<{
+    enrollments: number;
+    active_learners: number;
+    completed_learners: number;
+    avg_progress_percent: number;
+  }>(
+    `SELECT COUNT(DISTINCT e.user_id)::int AS enrollments,
+            COUNT(DISTINCT e.user_id) FILTER (WHERE e.progress_percent > 0)::int AS active_learners,
+            COUNT(DISTINCT e.user_id) FILTER (WHERE e.progress_percent >= 100)::int AS completed_learners,
+            COALESCE(ROUND(AVG(e.progress_percent)::numeric, 1), 0)::float AS avg_progress_percent
+     FROM enrollments e WHERE e.course_id = $1`,
+    [courseId],
+  );
+
+  const quizTotals = await queryOne<{ attempts: number; avg_quiz_score: number | null }>(
+    `SELECT COUNT(qa.id)::int AS attempts,
+            AVG(qa.score)::float AS avg_quiz_score
+     FROM quiz_attempts qa
+     JOIN quizzes q ON q.id = qa.quiz_id
+     JOIN modules m ON m.id = q.module_id
+     WHERE m.course_id = $1 AND qa.submitted_at IS NOT NULL AND qa.score IS NOT NULL`,
+    [courseId],
+  );
+
+  const timeOnTask = await queryOne<{ watch_seconds: number }>(
+    `SELECT COALESCE(SUM(lp.watched_seconds), 0)::int AS watch_seconds
+     FROM lecture_progress lp
+     JOIN enrollments e ON e.id = lp.enrollment_id
+     WHERE e.course_id = $1`,
+    [courseId],
+  );
+
+  const lectureRows = await query<LectureStatRow>(
+    `SELECT l.id, l.title, m.title AS module_title, l.duration_seconds,
+            COUNT(lp.id)::int AS learners,
+            COUNT(lp.id) FILTER (WHERE lp.completed)::int AS completions,
+            COALESCE(AVG(lp.watched_seconds), 0)::float AS avg_watched_seconds
+     FROM lectures l
+     JOIN modules m ON m.id = l.module_id
+     LEFT JOIN lecture_progress lp ON lp.lecture_id = l.id
+     WHERE m.course_id = $1
+     GROUP BY l.id, l.title, m.title, l.duration_seconds, m.order_index, l.order_index
+     ORDER BY m.order_index, l.order_index`,
+    [courseId],
+  );
+
+  const quizRows = await query<{
+    id: string;
+    title: string;
+    module_title: string;
+    attempts: number;
+    learners: number;
+    avg_score: number | null;
+  }>(
+    `SELECT q.id, q.title, m.title AS module_title,
+            COUNT(qa.id)::int AS attempts,
+            COUNT(DISTINCT qa.user_id)::int AS learners,
+            AVG(qa.score)::float AS avg_score
+     FROM quizzes q
+     JOIN modules m ON m.id = q.module_id
+     LEFT JOIN quiz_attempts qa ON qa.quiz_id = q.id AND qa.submitted_at IS NOT NULL
+     WHERE m.course_id = $1
+     GROUP BY q.id, q.title, m.title, m.order_index
+     ORDER BY m.order_index, q.title`,
+    [courseId],
+  );
+
+  const enrollments = overview?.enrollments ?? 0;
+  const watchSeconds = timeOnTask?.watch_seconds ?? 0;
+
+  return {
+    course_id: courseId,
+    overview: {
+      enrollments,
+      active_learners: overview?.active_learners ?? 0,
+      completion_rate: completionRate(overview?.completed_learners ?? 0, enrollments),
+      avg_progress_percent: Number(overview?.avg_progress_percent ?? 0),
+      avg_quiz_score: Math.round(Number(quizTotals?.avg_quiz_score ?? 0) * 100) / 100,
+      attempts: quizTotals?.attempts ?? 0,
+      watch_hours: Math.round((watchSeconds / 3600) * 100) / 100,
+    },
+    lectures: lectureRows.map(decorateLectureStat),
+    quizzes: quizRows.map((q) => ({ ...q, avg_score: Math.round(Number(q.avg_score ?? 0) * 100) / 100 })),
+  };
 }
 
 export async function createCourse(user: AuthUser, input: CreateCourseInput) {

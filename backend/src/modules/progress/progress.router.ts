@@ -5,7 +5,7 @@ import { query, queryOne, withTransaction } from '../../db/pool';
 import { badRequest, forbidden, notFound } from '../../utils/errors';
 import { touchStreak } from '../gamification/gamification.service';
 import { awardBadge } from '../../utils/badges';
-import { queueCertificate } from '../../jobs/queues';
+import { queueCertificate, queueMasteryRecompute } from '../../jobs/queues';
 import { logger } from '../../utils/logger';
 
 /**
@@ -97,6 +97,11 @@ progressRouter.post(
     });
 
     await touchStreak(req.user!.id);
+
+    // FR-A8: a completed lecture moves the module's completion component.
+    if (completed) {
+      await queueMasteryRecompute({ userId: req.user!.id, courseId: course_id });
+    }
 
     // FR-S8: certificate auto-generated at 100% module/course completion.
     if (result.percent >= 100) {

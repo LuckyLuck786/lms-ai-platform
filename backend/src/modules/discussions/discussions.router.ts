@@ -4,6 +4,7 @@ import { authenticate, requireRole } from '../../middleware/auth';
 import { query, queryOne } from '../../db/pool';
 import { forbidden, notFound } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { queueEmail } from '../../jobs/queues';
 
 /**
  * Per-course threaded discussion forum (PRD §3.1 / FR-AD5).
@@ -38,10 +39,14 @@ async function requireCourseAccess(userId: string, roles: string[], courseId: st
 }
 
 async function requireThreadAccess(userId: string, roles: string[], threadId: string) {
-  const thread = await queryOne<{ id: string; course_id: string; created_by: string }>(
-    'SELECT id, course_id, created_by FROM discussion_threads WHERE id = $1',
-    [threadId],
-  );
+  const thread = await queryOne<{
+    id: string;
+    course_id: string;
+    created_by: string;
+    title: string;
+  }>('SELECT id, course_id, created_by, title FROM discussion_threads WHERE id = $1', [
+    threadId,
+  ]);
   if (!thread) throw notFound('Thread not found');
   await requireCourseAccess(userId, roles, thread.course_id);
   return thread;
@@ -122,12 +127,27 @@ discussionsRouter.post(
       [req.params.id, req.user!.id, input.content],
     );
 
-    // Notify the thread author about new activity (not on self-reply).
+    // Notify the thread author about new activity (not on self-reply),
+    // in-app and by email so a slow thread still reaches them.
     if (thread.created_by !== req.user!.id) {
       await query(
         'INSERT INTO notifications (user_id, title, body) VALUES ($1, $2, $3)',
         [thread.created_by, 'New reply in your thread', `${req.user!.email} replied: ${input.content.slice(0, 120)}`],
       );
+
+      const author = await queryOne<{ email: string; is_active: boolean }>(
+        'SELECT email, is_active FROM users WHERE id = $1',
+        [thread.created_by],
+      );
+      if (author?.is_active) {
+        await queueEmail({
+          kind: 'discussion',
+          subject: `New reply in “${thread.title}”`,
+          body: `${req.user!.email} replied:\n\n${input.content.slice(0, 600)}`,
+          recipients: [author.email],
+          cta: { label: 'Open the thread', path: `/courses/${thread.course_id}/discussions` },
+        });
+      }
     }
     res.status(201).json(post);
   }),

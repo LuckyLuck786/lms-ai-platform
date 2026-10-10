@@ -4,6 +4,8 @@ import { aiChatRateLimiter } from '../../middleware/rateLimit';
 import { env } from '../../config/env';
 import { internal } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { queryOne } from '../../db/pool';
+import { queueMasteryRecompute } from '../../jobs/queues';
 
 /**
  * AI Tutor proxy (PRD §8.5). The FastAPI service stays internal: the backend
@@ -45,9 +47,14 @@ async function forward(req: Request, res: Response, targetPath: string): Promise
 }
 
 const wrap =
-  (pathBuilder: (req: Request) => string) =>
-  (req: Request, res: Response, next: NextFunction) => {
-    forward(req, res, pathBuilder(req)).catch(next);
+  (pathBuilder: (req: Request) => string | Promise<string>) =>
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const targetPath = await pathBuilder(req);
+      await forward(req, res, targetPath);
+    } catch (err) {
+      next(err);
+    }
   };
 
 // Chat endpoints apply authenticate + the 20/min/user AI limit per route.
@@ -64,7 +71,18 @@ aiRouter.post(
   '/chat/sessions/:id/messages',
   authenticate,
   aiChatRateLimiter,
-  wrap((req) => `/api/v1/ai/chat/sessions/${req.params.id}/messages`),
+  wrap(async (req) => {
+    // PRD §9.2 step 5: a background job refreshes the learner's topic-mastery
+    // scores after each tutor interaction (deduplicated by user+course).
+    const session = await queryOne<{ course_id: string }>(
+      'SELECT course_id FROM ai_chat_sessions WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user!.id],
+    ).catch(() => null);
+    if (session) {
+      await queueMasteryRecompute({ userId: req.user!.id, courseId: session.course_id });
+    }
+    return `/api/v1/ai/chat/sessions/${req.params.id}/messages`;
+  }),
 );
 aiRouter.put(
   '/chat/sessions/:id/mode',

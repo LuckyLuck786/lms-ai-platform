@@ -3,40 +3,42 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { AdminOverview, AdminUser, PendingCourse, Role } from '../../utils/types';
+import { useI18n } from '../../utils/i18n';
 
 type Tab = 'overview' | 'users' | 'approvals' | 'moderation';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'users', label: 'Users' },
-  { id: 'approvals', label: 'Course approvals' },
-  { id: 'moderation', label: 'Moderation' },
+const TABS: { id: Tab; labelKey: string }[] = [
+  { id: 'overview', labelKey: 'admin.overview' },
+  { id: 'users', labelKey: 'admin.users' },
+  { id: 'approvals', labelKey: 'admin.courseApprovals' },
+  { id: 'moderation', labelKey: 'admin.moderation' },
 ];
 
 /** Admin panel (FR-AD1..AD5): platform metrics, users, approvals, moderation. */
 export default function AdminDashboard() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('overview');
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Admin panel</h1>
+      <h1 className="text-2xl font-bold">{t('admin.panel')}</h1>
 
       <nav
-        aria-label="Admin sections"
+        aria-label={t('admin.sections')}
         className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
       >
-        {TABS.map((t) => (
+        {TABS.map((item) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            aria-current={tab === t.id ? 'page' : undefined}
+            key={item.id}
+            onClick={() => setTab(item.id)}
+            aria-current={tab === item.id ? 'page' : undefined}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
-              tab === t.id
+              tab === item.id
                 ? 'border-brand-600 text-brand-700 dark:text-brand-100'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            {t.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </nav>
@@ -50,6 +52,7 @@ export default function AdminDashboard() {
 }
 
 function Overview() {
+  const { t } = useI18n();
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin', 'overview'],
     queryFn: async () => (await api.get<AdminOverview>('/admin/analytics/overview')).data,
@@ -61,14 +64,20 @@ function Overview() {
   if (!data) return null;
 
   const metrics: { label: string; value: string }[] = [
-    { label: 'DAU', value: String(data.dau) },
-    { label: 'Total users', value: String(data.total_users) },
-    { label: 'Enrollments', value: String(data.total_enrollments) },
-    { label: 'Completion rate', value: `${data.completion_rate}%` },
-    { label: 'Courses', value: `${data.approved_courses}/${data.total_courses} approved` },
-    { label: 'Pending approvals', value: String(data.pending_courses) },
-    { label: 'Revenue', value: `$${data.revenue.toFixed(2)}` },
-    { label: 'Flagged posts', value: String(data.flagged_posts) },
+    { label: t('admin.dau'), value: String(data.dau) },
+    { label: t('admin.totalUsers'), value: String(data.total_users) },
+    { label: t('admin.enrolments'), value: String(data.total_enrollments) },
+    { label: t('admin.completionRate'), value: `${data.completion_rate}%` },
+    {
+      label: t('dashboard.coursesCount'),
+      value: t('admin.coursesApproved', {
+        approved: data.approved_courses,
+        total: data.total_courses,
+      }),
+    },
+    { label: t('admin.pendingApprovals'), value: String(data.pending_courses) },
+    { label: t('admin.revenue'), value: `$${data.revenue.toFixed(2)}` },
+    { label: t('admin.flaggedPosts'), value: String(data.flagged_posts) },
   ];
 
   return (
@@ -84,6 +93,7 @@ function Overview() {
 }
 
 function Users() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
@@ -122,15 +132,15 @@ function Users() {
           setQ(search);
         }}
       >
-        <label htmlFor="user-search" className="sr-only">Search users</label>
+        <label htmlFor="user-search" className="sr-only">{t('admin.searchUsers')}</label>
         <input
           id="user-search"
           className="input max-w-sm flex-1"
-          placeholder="Search by name or email…"
+          placeholder={t('admin.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button type="submit" className="btn-secondary">Search</button>
+        <button type="submit" className="btn-secondary">{t('common.search')}</button>
       </form>
 
       {users.isLoading ? (
@@ -140,11 +150,11 @@ function Users() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-400 dark:border-slate-800">
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Enrollments</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Actions</th>
+                <th className="px-4 py-3">{t('admin.user')}</th>
+                <th className="px-4 py-3">{t('admin.role')}</th>
+                <th className="px-4 py-3">{t('admin.enrolments')}</th>
+                <th className="px-4 py-3">{t('admin.status')}</th>
+                <th className="px-4 py-3">{t('admin.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -159,7 +169,7 @@ function Users() {
                       className="input w-32 py-1 text-xs"
                       value={u.roles[0] ?? 'student'}
                       onChange={(e) => changeRole.mutate({ id: u.id, role: e.target.value as Role })}
-                      aria-label={`Role for ${u.full_name}`}
+                      aria-label={t('admin.roleFor', { name: u.full_name })}
                     >
                       <option value="student">student</option>
                       <option value="instructor">instructor</option>
@@ -175,7 +185,7 @@ function Users() {
                           : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
                       }`}
                     >
-                      {u.is_active ? 'active' : 'suspended'}
+                      {u.is_active ? t('admin.active') : t('admin.suspended')}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -183,7 +193,7 @@ function Users() {
                       className="btn-secondary py-1 text-xs"
                       onClick={() => toggleSuspend.mutate({ id: u.id, is_active: !u.is_active })}
                     >
-                      {u.is_active ? 'Suspend' : 'Restore'}
+                      {u.is_active ? t('admin.suspend') : t('admin.restore')}
                     </button>
                   </td>
                 </tr>
@@ -197,6 +207,7 @@ function Users() {
 }
 
 function Approvals() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [comment, setComment] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -229,7 +240,7 @@ function Approvals() {
     <div className="space-y-4">
       {message && <Alert>{message}</Alert>}
       {queue.data?.items.length === 0 && (
-        <Card className="text-slate-500">Approval queue is empty 🎉</Card>
+        <Card className="text-slate-500">{t('admin.approvalsEmpty')}</Card>
       )}
       {queue.data?.items.map((c) => (
         <Card key={c.id}>
@@ -237,29 +248,30 @@ function Approvals() {
             <div>
               <h3 className="font-semibold">{c.title}</h3>
               <p className="text-sm text-slate-500">
-                by {c.instructor_name} · {c.category ?? 'uncategorized'} · {c.difficulty ?? '—'} ·{' '}
-                {c.module_count} module(s)
+                {t('course.by', { name: c.instructor_name ?? '' })} ·{' '}
+                {c.category ?? t('admin.uncategorized')} · {c.difficulty ?? '—'} ·{' '}
+                {t('admin.moduleCount', { count: c.module_count })}
               </p>
               <p className="mt-1 line-clamp-2 text-sm text-slate-500">{c.description}</p>
             </div>
             <div className="flex gap-2">
               <button className="btn-primary" onClick={() => decide.mutate({ id: c.id, decision: 'approved' })}>
-                Approve
+                {t('admin.approve')}
               </button>
               <button
                 className="btn-secondary"
                 onClick={() => decide.mutate({ id: c.id, decision: 'rejected' })}
               >
-                Reject
+                {t('admin.reject')}
               </button>
             </div>
           </div>
           <input
             className="input mt-3"
-            placeholder="Reviewer comment (optional)"
+            placeholder={t('admin.reviewerComment')}
             value={comment[c.id] ?? ''}
             onChange={(e) => setComment((m) => ({ ...m, [c.id]: e.target.value }))}
-            aria-label={`Reviewer comment for ${c.title}`}
+            aria-label={t('admin.reviewerCommentFor', { title: c.title })}
           />
         </Card>
       ))}
@@ -277,6 +289,7 @@ interface FlaggedPost {
 }
 
 function Moderation() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
 
@@ -300,7 +313,7 @@ function Moderation() {
       {flagged.isLoading ? (
         <div className="flex justify-center py-10"><Spinner /></div>
       ) : flagged.data?.items.length === 0 ? (
-        <Card className="text-slate-500">No flagged posts — the forum is clean.</Card>
+        <Card className="text-slate-500">{t('admin.flaggedEmpty')}</Card>
       ) : (
         flagged.data?.items.map((p) => (
           <Card key={p.id}>
@@ -313,7 +326,7 @@ function Moderation() {
                 </p>
               </div>
               <button className="btn-secondary text-red-600" onClick={() => remove.mutate(p.id)}>
-                Remove
+                {t('admin.remove')}
               </button>
             </div>
           </Card>

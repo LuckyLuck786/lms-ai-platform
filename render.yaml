@@ -1,0 +1,57 @@
+# Render blueprint (PRD §14.1) — the two stateless services.
+#
+# Render's free Postgres expires after 30 days, so data lives in the longer
+# free tiers of Neon (Postgres + pgvector) and Upstash (Redis); their URLs are
+# pasted into the env vars marked `sync: false` when the blueprint runs.
+# Import this file from Render → New → Blueprint → this repository.
+services:
+  - type: web
+    name: vertexon-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Neon pooled URL, must include ?sslmode=require
+      - key: REDIS_URL
+        sync: false # Upstash TCP URL, rediss://default:...@host:6379
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: AI_SERVICE_URL
+        value: https://vertexon-ai.onrender.com
+      - key: CORS_ORIGIN
+        value: https://lms-ai-frontend.vercel.app
+      - key: APP_URL
+        value: https://lms-ai-frontend.vercel.app
+      - key: SMTP_URL
+        sync: false # optional smtp://... — email logs as dry-run without it
+
+  - type: web
+    name: vertexon-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./ai-service/Dockerfile
+    dockerContext: ./ai-service
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # same Neon URL as vertexon-api
+      - key: REDIS_URL
+        sync: false # same Upstash URL as vertexon-api
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: vertexon-api
+          envVarKey: JWT_SECRET
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://lms-ai-frontend.vercel.app

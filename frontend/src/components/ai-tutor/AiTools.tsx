@@ -1,21 +1,38 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Spinner } from '../common/ui';
+import { useI18n } from '../../utils/i18n';
 
 interface Props {
   lectureId: string;
   moduleId: string;
+  courseId: string;
 }
 
-type Tab = 'summary' | 'flashcards' | 'quiz' | 'plan';
+interface MasteryRow {
+  module_id: string;
+  module_title: string;
+  mastery_score: string | number;
+  depth: string;
+}
+
+const DEPTH_COLOR: Record<string, string> = {
+  beginner: 'bg-rose-500',
+  intermediate: 'bg-amber-500',
+  advanced: 'bg-emerald-500',
+};
 
 /**
  * One-click AI generation tools (FR-A3/A4/A5/A7): lecture summaries,
  * auto-generated quiz drafts, module flashcards, and a personalized
- * study plan from quiz history.
+ * study plan from quiz history. Also surfaces the learner's topic-mastery
+ * scores (FR-A8) that drive adaptive chat and quiz difficulty.
  */
-export default function AiTools({ lectureId, moduleId }: Props) {
+type Tab = 'summary' | 'flashcards' | 'quiz' | 'plan';
+
+export default function AiTools({ lectureId, moduleId, courseId }: Props) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [active, setActive] = useState<Tab | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
@@ -23,6 +40,15 @@ export default function AiTools({ lectureId, moduleId }: Props) {
   const [plan, setPlan] = useState<string[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // FR-A8: per-module mastery feeding adaptive chat + quiz difficulty.
+  const mastery = useQuery({
+    queryKey: ['mastery', courseId],
+    queryFn: async () =>
+      (await api.get<{ items: MasteryRow[] }>('/users/me/mastery', {
+        params: { course_id: courseId },
+      })).data,
+  });
 
   const summarize = useMutation({
     mutationFn: async () => (await api.post(`/ai/lectures/${lectureId}/summarize`)).data,
@@ -49,11 +75,15 @@ export default function AiTools({ lectureId, moduleId }: Props) {
       (await api.post(`/ai/lectures/${lectureId}/generate-quiz`)).data as Promise<{
         quiz_id: string;
         question_count: number;
+        difficulty?: string;
       }>,
     onSuccess: (d) => {
       setActive('quiz');
       setError(null);
-      setMessage(`Draft with ${d.question_count} questions created for instructor review.`);
+      const difficulty = d.difficulty
+        ? ` · ${t('ai.quizDifficulty', { level: t(`player.mode.${d.difficulty}`) })}`
+        : '';
+      setMessage(t('ai.quizDraftCreated', { count: d.question_count }) + difficulty);
       queryClient.invalidateQueries({ queryKey: ['course'] });
     },
     onError: (e) => setError(apiErrorMessage(e)),
@@ -73,22 +103,22 @@ export default function AiTools({ lectureId, moduleId }: Props) {
     summarize.isPending || flashcards.isPending || generateQuiz.isPending || studyPlan.isPending;
 
   return (
-    <section aria-label="AI tools" className="card">
-      <h2 className="mb-3 font-semibold">🤖 AI tools</h2>
+    <section aria-label={t('player.aiTools')} className="card">
+      <h2 className="mb-3 font-semibold">🤖 {t('player.aiTools')}</h2>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
 
       <div className="flex flex-wrap gap-2">
         <button className="btn-secondary" disabled={pending} onClick={() => summarize.mutate()}>
-          Summarize lecture
+          {t('player.summarize')}
         </button>
         <button className="btn-secondary" disabled={pending} onClick={() => flashcards.mutate()}>
-          Make flashcards
+          {t('player.flashcards')}
         </button>
         <button className="btn-secondary" disabled={pending} onClick={() => generateQuiz.mutate()}>
-          Generate quiz draft
+          {t('ai.generateQuizDraft')}
         </button>
         <button className="btn-secondary" disabled={pending} onClick={() => studyPlan.mutate()}>
-          My study plan
+          {t('player.studyPlan')}
         </button>
       </div>
 
@@ -100,7 +130,7 @@ export default function AiTools({ lectureId, moduleId }: Props) {
             className="underline"
             onClick={() => void queryClient.invalidateQueries({ queryKey: ['course'] })}
           >
-            Refresh
+            {t('ai.refresh')}
           </button>
         </p>
       )}
@@ -115,8 +145,8 @@ export default function AiTools({ lectureId, moduleId }: Props) {
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {cards.map((c, i) => (
             <div key={i} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
-              <div className="font-medium">Q: {c.question}</div>
-              <div className="mt-1 text-slate-500">A: {c.answer}</div>
+              <div className="font-medium">{t('ai.questionPrefix')} {c.question}</div>
+              <div className="mt-1 text-slate-500">{t('ai.answerPrefix')} {c.answer}</div>
             </div>
           ))}
         </div>
@@ -127,6 +157,38 @@ export default function AiTools({ lectureId, moduleId }: Props) {
           {plan.map((line, i) => <li key={i}>{line}</li>)}
         </ol>
       )}
+
+      <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          📊 {t('ai.topicMastery')}
+        </h3>
+        {mastery.isLoading ? (
+          <Spinner className="h-4 w-4" />
+        ) : (mastery.data?.items.length ?? 0) === 0 ? (
+          <p className="text-xs text-slate-400">{t('ai.masteryEmpty')}</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {mastery.data!.items.map((row) => {
+              const score = Math.max(0, Math.min(100, Number(row.mastery_score)));
+              return (
+                <li key={row.module_id} className="text-xs">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-slate-600 dark:text-slate-300">{row.module_title}</span>
+                    <span className="shrink-0 font-medium">{score}%</span>
+                  </div>
+                  <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div
+                      className={`h-1.5 rounded-full ${DEPTH_COLOR[row.depth] ?? 'bg-slate-400'}`}
+                      style={{ width: `${score}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="mt-1.5 text-[11px] text-slate-400">{t('ai.masteryHint')}</p>
+      </div>
     </section>
   );
 }

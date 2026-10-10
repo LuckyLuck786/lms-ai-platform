@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Spinner } from '../common/ui';
+import { useI18n } from '../../utils/i18n';
 
 interface ChatSource {
   lecture_id: string;
@@ -17,19 +18,23 @@ interface ChatMessage {
 }
 
 const MODES = [
-  { value: 'beginner', label: 'Beginner' },
-  { value: 'intermediate', label: 'Intermediate' },
-  { value: 'advanced', label: 'Advanced' },
+  { value: 'beginner', labelKey: 'player.mode.beginner' },
+  { value: 'intermediate', labelKey: 'player.mode.intermediate' },
+  { value: 'advanced', labelKey: 'player.mode.advanced' },
+  { value: 'auto', labelKey: 'player.mode.auto' },
 ] as const;
 
 /**
- * AI Tutor chat (FR-A1/FR-A2/A6): session per course, RAG-grounded replies
- * with lecture citations, beginner/intermediate/advanced depth switcher.
+ * AI Tutor chat (FR-A1/FR-A2/A6/A8): session per course, RAG-grounded replies
+ * with lecture citations, beginner/intermediate/advanced depth switcher,
+ * plus an adaptive mode that picks the depth from topic mastery.
  */
 export default function AiTutorPanel({ courseId }: { courseId: string }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [mode, setMode] = useState<string>('intermediate');
+  const [depth, setDepth] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -71,16 +76,19 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
         sid = created.data.id;
         setSessionId(sid);
       }
-      const { data } = await api.post<{ reply: string; sources: ChatSource[]; mode: string }>(
-        `/ai/chat/sessions/${sid}/messages`,
-        { message: text },
-      );
+      const { data } = await api.post<{
+        reply: string;
+        sources: ChatSource[];
+        mode: string;
+        depth?: string;
+      }>(`/ai/chat/sessions/${sid}/messages`, { message: text });
       return data;
     },
     onSuccess: (data) => {
       setInput('');
       setError(null);
       setMode(data.mode);
+      setDepth(data.depth ?? null);
       queryClient.invalidateQueries({ queryKey: ['ai-messages', sessionId] });
       queryClient.invalidateQueries({ queryKey: ['ai-sessions', courseId] });
     },
@@ -100,10 +108,10 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
   const items = messages.data?.items ?? [];
 
   return (
-    <section aria-label="AI Tutor" className="card flex h-[540px] flex-col">
+    <section aria-label={t('player.aiTutor')} className="card flex h-[540px] flex-col">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="font-semibold">✨ AI Tutor</h2>
-        <label htmlFor="ai-mode" className="sr-only">Explanation depth</label>
+        <h2 className="font-semibold">✨ {t('player.aiTutor')}</h2>
+        <label htmlFor="ai-mode" className="sr-only">{t('player.depthLabel')}</label>
         <select
           id="ai-mode"
           className="input w-36 py-1.5 text-xs"
@@ -111,20 +119,23 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
           onChange={(e) => void switchMode(e.target.value)}
         >
           {MODES.map((m) => (
-            <option key={m.value} value={m.value}>{m.label}</option>
+            <option key={m.value} value={m.value}>{t(m.labelKey)}</option>
           ))}
         </select>
       </div>
+
+      {mode === 'auto' && depth && (
+        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+          🎯 {t('ai.depthAdjusted', { depth: t(`player.mode.${depth}`) })}
+        </p>
+      )}
 
       {error && <div className="mb-2"><Alert>{error}</Alert></div>}
 
       <div className="mb-3 flex-1 space-y-3 overflow-y-auto pr-1">
         {messages.isLoading && <div className="flex justify-center py-6"><Spinner /></div>}
         {items.length === 0 && !messages.isLoading && (
-          <p className="text-sm text-slate-400">
-            Ask anything about this course — answers are grounded in the course material with
-            citations to specific lectures.
-          </p>
+          <p className="text-sm text-slate-400">{t('player.askAnything')}</p>
         )}
         {items.map((m) => (
           <div
@@ -142,7 +153,11 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
                   <span
                     key={s.lecture_id}
                     className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                    title={s.timestamp_seconds != null ? `≈ ${s.timestamp_seconds}s into the lecture` : undefined}
+                    title={
+                      s.timestamp_seconds != null
+                        ? t('ai.citationTitle', { seconds: s.timestamp_seconds })
+                        : undefined
+                    }
                   >
                     📎 {s.lecture_title ?? 'lecture'}
                     {s.timestamp_seconds != null && ` @ ${Math.floor(s.timestamp_seconds / 60)}:${String(s.timestamp_seconds % 60).padStart(2, '0')}`}
@@ -168,16 +183,16 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
           if (text && !send.isPending) send.mutate(text);
         }}
       >
-        <label htmlFor="ai-input" className="sr-only">Ask the AI tutor</label>
+        <label htmlFor="ai-input" className="sr-only">{t('ai.askTheTutor')}</label>
         <input
           id="ai-input"
           className="input flex-1"
-          placeholder="Ask a question about this course…"
+          placeholder={t('player.askPlaceholder')}
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
         <button type="submit" className="btn-primary" disabled={!input.trim() || send.isPending}>
-          Send
+          {t('player.send')}
         </button>
       </form>
     </section>

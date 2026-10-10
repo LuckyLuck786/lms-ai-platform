@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import multer from 'multer';
 import { ZodError } from 'zod';
 import { AppError } from '../utils/errors';
 import { logger } from '../utils/logger';
@@ -10,6 +11,20 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       logger.error('request_failed', { path: req.path, code: err.code, message: err.message });
     }
     res.status(err.status).json(err.toJSON());
+    return;
+  }
+
+  // Multer raises its own error type for oversize/malformed uploads; surface
+  // it as a 4xx so clients get the standard envelope instead of a 500.
+  if (err instanceof multer.MulterError) {
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    res.status(tooLarge ? 413 : 400).json({
+      error: {
+        code: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_REJECTED',
+        message: tooLarge ? 'The uploaded file is too large' : `Upload rejected: ${err.message}`,
+        field: err.field || undefined,
+      },
+    });
     return;
   }
 

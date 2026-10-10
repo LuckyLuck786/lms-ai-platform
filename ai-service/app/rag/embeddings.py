@@ -1,9 +1,13 @@
 """Embedding generation — produces VECTOR(1536) rows for document_chunks.
 
-Provider order: Gemini text-embedding-004 (free tier, 768 dims — zero-padded
-to 1536; padding with zeros preserves cosine similarity exactly, so chunks
-embedded before/after remain comparable) → deterministic local fallback so
-development works with no keys at all.
+Provider order: Gemini (``gemini-embedding-001``, free tier) → deterministic
+local fallback so development works with no keys at all.
+
+``gemini-embedding-001`` natively emits 3072 dimensions, but it is
+Matryoshka-trained: we request a 1536-dimension prefix via
+``outputDimensionality`` so the vectors land exactly on the
+``document_chunks.embedding VECTOR(1536)`` column — no truncation, no padding
+for the happy path.
 """
 
 import hashlib
@@ -12,34 +16,44 @@ import httpx
 
 from ..core.config import get_settings
 
-GEMINI_EMBED_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "text-embedding-004:embedContent"
-)
-GEMINI_EMBED_DIMS = 768
+GEMINI_EMBED_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+# Historical name kept for callers/tests that referenced the old constant.
+GEMINI_EMBED_URL = f"{GEMINI_EMBED_BASE}/gemini-embedding-001:embedContent"
+# Dimensions requested from the Gemini embedding model.
+GEMINI_EMBED_DIMS = 1536
 TARGET_DIMS = 1536
 
 
 def pad_to(vector: list[float], dims: int = TARGET_DIMS) -> list[float]:
-    """Zero-pad an embedding to the column dimension.
+    """Zero-pad/truncate an embedding to the column dimension.
 
     Cosine similarity is invariant under zero-padding of both vectors
     (dot product and norms are unchanged), so pgvector's <=> operator
-    behaves identically.
+    behaves identically. This matters when a provider returns fewer dims
+    than the column, e.g. text-embedding-004's 768.
     """
     if len(vector) >= dims:
         return vector[:dims]
     return vector + [0.0] * (dims - len(vector))
 
 
+def _supports_output_dimensionality(model: str) -> bool:
+    """Only the gemini-embedding-* family accepts outputDimensionality."""
+    return model.startswith("gemini-embedding")
+
+
 def _embed_gemini(text: str) -> list[float]:
     settings = get_settings()
-    payload = {
-        "model": "models/text-embedding-004",
+    model = settings.embedding_model or "gemini-embedding-001"
+    payload: dict = {
+        "model": f"models/{model}",
         "content": {"parts": [{"text": text[:8000]}]},
     }
+    if _supports_output_dimensionality(model):
+        payload["outputDimensionality"] = TARGET_DIMS
+
     resp = httpx.post(
-        GEMINI_EMBED_URL,
+        f"{GEMINI_EMBED_BASE}/{model}:embedContent",
         json=payload,
         params={"key": settings.gemini_api_key},
         timeout=30,

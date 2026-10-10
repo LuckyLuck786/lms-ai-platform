@@ -48,7 +48,29 @@ export const createLectureSchema = z.object({
   transcript: z.string().optional(),
   duration_seconds: z.coerce.number().int().min(0).optional(),
   order_index: z.coerce.number().int().min(0).optional(),
-  resource_urls: z.array(z.string()).optional(),
+  // JSON callers send an array; multipart callers can only send strings, so
+  // accept a JSON array or a comma-separated list too (FR-I2 uploads).
+  resource_urls: z
+    .union([z.array(z.string().max(500)), z.string().max(5000)])
+    .optional()
+    .transform((value) => {
+      if (value === undefined) return undefined;
+      if (Array.isArray(value)) return value;
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return parsed.map(String);
+        } catch {
+          // not JSON — fall through to comma splitting
+        }
+      }
+      return trimmed
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }),
 });
 
 export const approveCourseSchema = z.object({

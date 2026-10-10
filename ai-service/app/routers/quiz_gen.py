@@ -1,15 +1,18 @@
 import json
 import re
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel
 
 from ..core.config import get_settings
 from ..core.db import execute, query_all, query_one
 from ..core.llm import LLMError, complete
+from ..core.mastery import quiz_difficulty
 
 router = APIRouter()
 
-SYSTEM = (
+BASE_SYSTEM = (
     "You create quiz questions from lecture transcripts. "
     "Return ONLY minified JSON of the shape "
     '{"questions":[{"question_text":"...","question_type":"mcq",'
@@ -18,6 +21,31 @@ SYSTEM = (
     "mcq needs exactly one correct option; multi_select needs 1-3 correct options; "
     "short_answer needs an empty options array. Base every question strictly on the transcript."
 )
+
+DIFFICULTY_INSTRUCTIONS = {
+    "beginner": (
+        "Set the difficulty to beginner: recall-level questions about definitions "
+        "and single-step ideas; no trick distractors."
+    ),
+    "intermediate": (
+        "Set the difficulty to intermediate: apply concepts to typical scenarios; "
+        "use plausible but clearly-wrong distractors."
+    ),
+    "advanced": (
+        "Set the difficulty to advanced: multi-step reasoning, edge cases and "
+        "trade-offs; distractors should be subtle and defensible."
+    ),
+}
+
+
+def system_prompt(difficulty: str) -> str:
+    return f"{BASE_SYSTEM} {DIFFICULTY_INSTRUCTIONS.get(difficulty, DIFFICULTY_INSTRUCTIONS['intermediate'])}"
+
+
+class GenerateQuizRequest(BaseModel):
+    # Optional override; when absent the band comes from the learner's
+    # topic-mastery rows (FR-A8 feeding FR-A5).
+    difficulty: Optional[str] = None
 
 
 def _parse_quiz_json(raw: str) -> list[dict]:
@@ -54,11 +82,17 @@ def _fallback_questions(transcript: str) -> list[dict]:
 
 
 @router.post("/lectures/{lecture_id}/generate-quiz")
-def generate_quiz(lecture_id: str) -> dict:
+def generate_quiz(
+    lecture_id: str,
+    req: GenerateQuizRequest = GenerateQuizRequest(),
+    x_user_id: Optional[str] = Header(default=None),
+) -> dict:
     """POST /api/v1/ai/lectures/:id/generate-quiz — FR-A5.
 
     Persists a draft quiz (is_ai_generated = true) on the lecture's module
-    for the instructor to review and approve (FR-I4).
+    for the instructor to review and approve (FR-I4). The difficulty band
+    honours an explicit request, otherwise it derives from the requesting
+    learner's topic mastery (FR-A8).
     """
     lecture = query_one(
         """
@@ -74,11 +108,20 @@ def generate_quiz(lecture_id: str) -> dict:
     if not transcript.strip():
         raise HTTPException(status_code=400, detail="Lecture has no transcript")
 
+    # Difficulty: explicit > mastery-derived > intermediate.
+    requested = (req.difficulty or "").lower()
+    if requested in DIFFICULTY_INSTRUCTIONS:
+        difficulty = requested
+    elif x_user_id:
+        difficulty = quiz_difficulty(x_user_id, lecture["course_id"], lecture["module_id"])
+    else:
+        difficulty = "intermediate"
+
     demo_mode = False
     if get_settings().llm_available:
         try:
             raw = complete(
-                SYSTEM,
+                system_prompt(difficulty),
                 [{"role": "user", "content": f"Transcript of “{lecture['title']}”:\n\n{transcript}"}],
                 max_tokens=2000,
             )
@@ -123,6 +166,7 @@ def generate_quiz(lecture_id: str) -> dict:
         "title": quiz["title"],
         "question_count": len(created),
         "is_ai_generated": True,
+        "difficulty": difficulty,
         "demo_mode": demo_mode,
         "message": "Draft created for instructor review.",
     }

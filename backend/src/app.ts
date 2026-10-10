@@ -8,11 +8,16 @@ import { errorHandler, notFoundHandler, requestLogger } from './middleware/error
 import { authenticate } from './middleware/auth';
 import { authRouter } from './modules/auth/auth.router';
 import { coursesRouter } from './modules/courses/courses.router';
-import { enrollmentsRouter, modulesRouter } from './modules/enrollments/enrollments.router';
+import {
+  enrollmentsRouter,
+  lecturesRouter,
+  modulesRouter,
+} from './modules/enrollments/enrollments.router';
 import { progressRouter } from './modules/progress/progress.router';
 import { attemptsRouter, quizzesRouter } from './modules/quizzes/quizzes.router';
 import { assignmentsRouter } from './modules/assignments/assignments.router';
 import { gamificationRouter } from './modules/gamification/gamification.router';
+import { masteryRouter } from './modules/mastery/mastery.router';
 import { aiRouter } from './modules/ai/ai.router';
 import { discussionsRouter } from './modules/discussions/discussions.router';
 import { announcementsRouter } from './modules/announcements/announcements.router';
@@ -36,7 +41,7 @@ export function createApp(): express.Express {
   // 100 req/min/user on everything except /auth/* and /ai/chat/* (PRD §8.9)
   app.use('/api/v1', generalRateLimiter);
 
-  // Uploaded assignment files + generated certificate PDFs
+  // Uploaded lecture material, assignment files + generated certificate PDFs
   app.use(
     '/uploads',
     express.static(path.join(process.cwd(), 'uploads'), { dotfiles: 'deny', maxAge: '1h' }),
@@ -48,12 +53,14 @@ export function createApp(): express.Express {
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/courses', coursesRouter);
   app.use('/api/v1/modules', modulesRouter);
+  app.use('/api/v1', lecturesRouter);
   app.use('/api/v1', enrollmentsRouter);
   app.use('/api/v1', progressRouter);
   app.use('/api/v1/quizzes', quizzesRouter);
   app.use('/api/v1', attemptsRouter);
   app.use('/api/v1', assignmentsRouter);
   app.use('/api/v1', gamificationRouter);
+  app.use('/api/v1', masteryRouter);
   app.use('/api/v1/ai', aiRouter);
   app.use('/api/v1', discussionsRouter);
   app.use('/api/v1', announcementsRouter);

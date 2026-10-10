@@ -6,8 +6,10 @@ import { setAuth } from '../../store/authSlice';
 import { useAppDispatch } from '../../store/hooks';
 import { AuthResponse } from '../../utils/types';
 import { Alert, Card } from '../../components/common/ui';
+import { useI18n } from '../../utils/i18n';
 
 export default function Register() {
+  const { t } = useI18n();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
@@ -42,11 +44,11 @@ export default function Register() {
   return (
     <div className="mx-auto max-w-md">
       <Card>
-        <h1 className="mb-4 text-xl font-bold">Create your account</h1>
+        <h1 className="mb-4 text-xl font-bold">{t('auth.createAccount')}</h1>
         {formError && <div className="mb-4"><Alert>{formError}</Alert></div>}
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="label" htmlFor="full_name">Full name</label>
+            <label className="label" htmlFor="full_name">{t('auth.fullName')}</label>
             <input
               id="full_name"
               required
@@ -58,7 +60,7 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="label" htmlFor="email">Email</label>
+            <label className="label" htmlFor="email">{t('auth.email')}</label>
             <input
               id="email"
               type="email"
@@ -70,7 +72,7 @@ export default function Register() {
             />
           </div>
           <div>
-            <label className="label" htmlFor="password">Password</label>
+            <label className="label" htmlFor="password">{t('auth.password')}</label>
             <input
               id="password"
               type="password"
@@ -80,24 +82,24 @@ export default function Register() {
               className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder={t('auth.passwordHint')}
             />
           </div>
           <div>
-            <label className="label" htmlFor="role">I am a…</label>
+            <label className="label" htmlFor="role">{t('auth.iAmA')}</label>
             <select id="role" className="input" value={role} onChange={(e) => setRole(e.target.value as 'student' | 'instructor')}>
-              <option value="student">Student</option>
-              <option value="instructor">Instructor</option>
+              <option value="student">{t('auth.student')}</option>
+              <option value="instructor">{t('auth.instructor')}</option>
             </select>
           </div>
           <button type="submit" className="btn-primary w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Creating account…' : 'Register'}
+            {mutation.isPending ? t('auth.creating') : t('auth.register')}
           </button>
         </form>
         <p className="mt-4 text-sm text-slate-500">
-          Already registered?{' '}
+          {t('auth.alreadyRegistered')}{' '}
           <Link to="/login" className="font-medium text-brand-600 hover:underline">
-            Log in
+            {t('auth.login')}
           </Link>
         </p>
       </Card>

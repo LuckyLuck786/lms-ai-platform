@@ -31,7 +31,7 @@ export default function AppLayout() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-white"
       >
-        Skip to main content
+        {t('app.skipToContent')}
       </a>
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
@@ -43,7 +43,7 @@ export default function AppLayout() {
           </Link>
           {/* Sits inline on wide screens and wraps onto its own row on narrow ones. */}
           <nav
-            aria-label="Main"
+            aria-label={t('nav.main')}
             className="order-last flex w-full items-center gap-1 sm:order-none sm:w-auto"
           >
             <NavLink to="/" end className={navLinkClass}>
@@ -64,7 +64,9 @@ export default function AppLayout() {
             )}
           </nav>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <label htmlFor="lang-select" className="sr-only">Language</label>
+            <label htmlFor="lang-select" className="sr-only">
+              {t('app.language')}
+            </label>
             <select
               id="lang-select"
               className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 text-sm
@@ -100,7 +102,7 @@ export default function AppLayout() {
         <Outlet />
       </main>
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400 dark:border-slate-800">
-        Vertexon Learning Technologies — LMS-AI
+        {t('app.footer')}
       </footer>
     </div>
   );

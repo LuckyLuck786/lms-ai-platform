@@ -209,6 +209,92 @@ export function studyPlan(state: DemoState, userId: string | null) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// topic mastery (FR-A8) — mirrors backend/src/utils/mastery.ts and
+// ai-service/app/core/mastery.py so demo mode bands identically.
+// ---------------------------------------------------------------------------
+
+export type Depth = 'beginner' | 'intermediate' | 'advanced';
+
+export interface MasteryRow {
+  course_id: string;
+  module_id: string;
+  module_title: string;
+  mastery_score: string;
+  quiz_avg: string | null;
+  completion_percent: string;
+  attempts: number;
+  updated_at: string;
+  depth: Depth;
+}
+
+export function resolveDepth(mastery: number | null): Depth {
+  if (mastery === null || Number.isNaN(mastery)) return 'intermediate';
+  if (mastery < 55) return 'beginner';
+  if (mastery < 80) return 'intermediate';
+  return 'advanced';
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/** Per-module mastery rows for one learner + course (quiz avg 70% + completion 30%). */
+export function topicMastery(state: DemoState, userId: string, courseId: string): MasteryRow[] {
+  const course = state.courses.find((c) => c.id === courseId);
+  if (!course) return [];
+
+  return course.modules.map((mod) => {
+    const quizIds = new Set(state.quizzes.filter((q) => q.module_id === mod.id).map((q) => q.id));
+    const attempts = state.attempts.filter(
+      (a) => a.user_id === userId && quizIds.has(a.quiz_id) && a.score !== null,
+    );
+    const quizAvg = attempts.length
+      ? attempts.reduce((sum, a) => sum + (a.score ?? 0), 0) / attempts.length
+      : null;
+
+    const lectures = mod.lectures ?? [];
+    const completed = lectures.filter((l) => state.progress[`${userId}:${l.id}`]?.completed).length;
+    const completion = lectures.length ? (completed / lectures.length) * 100 : 0;
+
+    const score =
+      quizAvg !== null && attempts.length > 0
+        ? quizAvg * 0.7 + completion * 0.3
+        : completion * 0.3;
+    const mastery = Math.min(100, Math.max(0, round2(score)));
+
+    return {
+      course_id: courseId,
+      module_id: mod.id,
+      module_title: mod.title,
+      mastery_score: mastery.toFixed(2),
+      quiz_avg: quizAvg === null ? null : round2(quizAvg).toFixed(2),
+      completion_percent: round2(completion).toFixed(2),
+      attempts: attempts.length,
+      updated_at: new Date().toISOString(),
+      depth: resolveDepth(mastery),
+    };
+  });
+}
+
+/** Mean mastery across rows (None-equivalent: null when there are no rows). */
+export function averageMastery(rows: MasteryRow[]): number | null {
+  if (!rows.length) return null;
+  return round2(rows.reduce((sum, r) => sum + Number(r.mastery_score), 0) / rows.length);
+}
+
+/** Difficulty band for an auto-generated quiz: module row first, else course average. */
+export function quizDifficulty(
+  state: DemoState,
+  userId: string,
+  courseId: string,
+  moduleId: string,
+): Depth {
+  const rows = topicMastery(state, userId, courseId);
+  const moduleRow = rows.find((r) => r.module_id === moduleId);
+  if (moduleRow) return resolveDepth(Number(moduleRow.mastery_score));
+  const avg = averageMastery(rows);
+  return avg === null ? 'intermediate' : resolveDepth(avg);
+}
+
 /** Creates a real draft quiz in the demo store so the refresh link has something to show. */
 export function generateQuizDraft(
   state: DemoState,

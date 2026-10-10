@@ -1,5 +1,12 @@
-from app.core.llm import build_gemini_prompt, resolve_provider
-from app.rag.embeddings import GEMINI_EMBED_DIMS, pad_to
+from app.core.llm import (
+    _gemini_candidate_text,
+    _gemini_generation_config,
+    _groq_message_text,
+    _uses_hidden_reasoning,
+    build_gemini_prompt,
+    resolve_provider,
+)
+from app.rag.embeddings import GEMINI_EMBED_DIMS, _supports_output_dimensionality, pad_to
 
 
 class TestProviderSelection:
@@ -65,5 +72,45 @@ class TestEmbeddingPadding:
     def test_truncates_oversized_vectors(self):
         assert len(pad_to([1.0] * 2000)) == 1536
 
-    def test_gemini_dims_fit_within_target(self):
-        assert GEMINI_EMBED_DIMS < 1536
+    def test_gemini_dims_match_the_column(self):
+        assert GEMINI_EMBED_DIMS == 1536
+
+
+def test_output_dimensionality_only_for_mrl_models():
+    assert _supports_output_dimensionality("gemini-embedding-001")
+    assert not _supports_output_dimensionality("text-embedding-004")
+
+
+class TestReasoningModels:
+    """gpt-oss / Gemini 2.5 hide reasoning tokens inside the output budget."""
+
+    def test_detects_groq_reasoning_models(self):
+        assert _uses_hidden_reasoning("openai/gpt-oss-120b")
+        assert _uses_hidden_reasoning("openai/gpt-oss-20b")
+        assert not _uses_hidden_reasoning("qwen/qwen3.8-27b")
+
+    def test_groq_prefers_content_over_reasoning(self):
+        assert _groq_message_text({"content": "answer", "reasoning": "hmm"}) == "answer"
+
+    def test_groq_falls_back_to_reasoning_when_content_empty(self):
+        assert _groq_message_text({"content": "", "reasoning": "thought"}) == "thought"
+        assert _groq_message_text({}) == ""
+
+    def test_gemini_disables_thinking_budget_for_25(self):
+        config = _gemini_generation_config("gemini-2.5-flash", 700)
+        assert config["thinkingConfig"] == {"thinkingBudget": 0}
+        assert config["maxOutputTokens"] == 700
+
+    def test_gemini_leaves_older_models_alone(self):
+        assert "thinkingConfig" not in _gemini_generation_config("gemini-1.5-flash", 700)
+
+    def test_gemini_drops_thought_parts(self):
+        candidate = {
+            "content": {
+                "parts": [
+                    {"text": "internal musing", "thought": True},
+                    {"text": "The visible answer"},
+                ]
+            }
+        }
+        assert _gemini_candidate_text(candidate) == "The visible answer"
