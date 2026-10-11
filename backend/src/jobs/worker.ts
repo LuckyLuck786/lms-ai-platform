@@ -6,6 +6,7 @@ import { EmailJob, queueConnection, queueEmail } from './queues';
 import { recomputeTopicMasterySafe } from '../utils/mastery';
 import { closeEmailTransport, sendEmail } from '../services/email';
 import { logger } from '../utils/logger';
+import { env } from '../config/env';
 
 /**
  * Background workers (PRD §9.3): certificate PDF generation + daily streak
@@ -28,7 +29,12 @@ export function startWorkers(): { close: () => Promise<void> } {
         'SELECT full_name, email FROM users WHERE id = $1',
         [userId],
       );
-      const course = await queryOne<{ title: string }>('SELECT title FROM courses WHERE id = $1', [courseId]);
+      const course = await queryOne<{ title: string; instructor_name: string | null }>(
+        `SELECT c.title, i.full_name AS instructor_name
+         FROM courses c LEFT JOIN users i ON i.id = c.instructor_id
+         WHERE c.id = $1`,
+        [courseId],
+      );
       if (!user || !course) return { skipped: true };
       const student = user; // named for readability in the email step below
 
@@ -37,6 +43,8 @@ export function startWorkers(): { close: () => Promise<void> } {
         studentName: user.full_name,
         courseTitle: course.title,
         issuedAt: new Date(),
+        instructorName: course.instructor_name ?? undefined,
+        verifyBaseUrl: env.smtp.appUrl,
       });
 
       await query('UPDATE certificates SET certificate_url = $2 WHERE id = $1', [cert.id, filePath]);

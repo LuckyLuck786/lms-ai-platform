@@ -20,6 +20,23 @@ const AI_TIMEOUT_MS = 60_000;
 async function forward(req: Request, res: Response, targetPath: string): Promise<void> {
   const url = `${env.aiServiceUrl}${targetPath}`;
   try {
+    // The AI service (FastAPI) uses snake_case; the backend API uses camelCase.
+    // Transform the body for chat endpoints so field names match.
+    let body: string | undefined;
+    if (!['GET', 'HEAD'].includes(req.method) && req.body) {
+      const raw = req.body;
+      // Transform camelCase → snake_case for ai-service chat APIs
+      if (targetPath.includes('/api/v1/ai/chat/sessions')) {
+        const transformed: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(raw)) {
+          const snake = key.replace(/[A-Z]/g, (l) => '_' + l.toLowerCase());
+          transformed[snake] = value;
+        }
+        body = JSON.stringify(transformed);
+      } else {
+        body = JSON.stringify(raw);
+      }
+    }
     const upstream = await fetch(url, {
       method: req.method,
       headers: {
@@ -27,7 +44,7 @@ async function forward(req: Request, res: Response, targetPath: string): Promise
         'x-user-id': req.user!.id,
         'x-user-roles': req.user!.roles.join(','),
       },
-      body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body ?? {}),
+      body,
       signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     const text = await upstream.text();

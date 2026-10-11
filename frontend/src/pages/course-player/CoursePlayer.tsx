@@ -1,12 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentType } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, apiErrorMessage } from '../../services/api';
+import { api, apiErrorMessage, mediaUrl } from '../../services/api';
 import { Alert, Card, ProgressBar, Spinner } from '../../components/common/ui';
 import { Bookmark, CourseDetail, Enrollment, Lecture, LectureProgress, Note } from '../../utils/types';
 import AiTutorPanel from '../../components/ai-tutor/AiTutorPanel';
 import AiTools from '../../components/ai-tutor/AiTools';
 import { useI18n } from '../../utils/i18n';
+import {
+  Archive,
+  Bookmark as BookmarkIcon,
+  Check,
+  ClipboardCheck,
+  Clock,
+  FileText,
+  Image as ImageIcon,
+  Paperclip,
+  Slides,
+  Table,
+  Video,
+  X,
+  type IconProps,
+} from '../../components/common/Icon';
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 const SAVE_INTERVAL_MS = 10_000;
@@ -17,21 +33,22 @@ const fmt = (s: number) => {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
-const RESOURCE_ICONS: Record<string, string> = {
-  pdf: '📄',
-  ppt: '📊',
-  pptx: '📊',
-  doc: '📝',
-  docx: '📝',
-  xls: '📈',
-  xlsx: '📈',
-  zip: '🗜️',
-  txt: '🗒️',
-  md: '🗒️',
-  png: '🖼️',
-  jpg: '🖼️',
-  jpeg: '🖼️',
-  mp4: '🎬',
+/** Line-art glyph per file kind — keeps the resource list visually consistent. */
+const RESOURCE_ICONS: Record<string, ComponentType<IconProps>> = {
+  pdf: FileText,
+  ppt: Slides,
+  pptx: Slides,
+  doc: FileText,
+  docx: FileText,
+  xls: Table,
+  xlsx: Table,
+  zip: Archive,
+  txt: FileText,
+  md: FileText,
+  png: ImageIcon,
+  jpg: ImageIcon,
+  jpeg: ImageIcon,
+  mp4: Video,
 };
 
 /**
@@ -48,9 +65,10 @@ export function resourceLabel(url: string): string {
   return decodeURIComponent(withoutId || segment);
 }
 
-function resourceIcon(url: string): string {
+function ResourceIcon({ url, className }: { url: string; className?: string }) {
   const ext = url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? '';
-  return RESOURCE_ICONS[ext] ?? '📎';
+  const Glyph = RESOURCE_ICONS[ext] ?? Paperclip;
+  return <Glyph className={className} />;
 }
 
 /**
@@ -219,17 +237,18 @@ export default function CoursePlayer() {
           <video
             ref={videoRef}
             key={lecture.id}
-            src={lecture.video_url}
+            src={mediaUrl(lecture.video_url)}
             controls
             preload="metadata"
             onLoadedMetadata={onLoadedMetadata}
-            className="aspect-video w-full rounded-xl bg-black"
+            className="aspect-video w-full rounded-sm border border-black/20 bg-black dark:border-white/10"
           >
             Your browser does not support HTML5 video.
           </video>
         ) : (
-          <Card className="aspect-video flex flex-col items-center justify-center text-slate-500">
-            <p className="mb-2">🎬 {t('player.noVideo')}</p>
+          <Card className="aspect-video flex flex-col items-center justify-center text-center text-slate-500">
+            <Video size={30} className="mb-3 text-slate-400 dark:text-slate-500" />
+            <p className="mb-2 font-medium text-slate-600 dark:text-slate-300">{t('player.noVideo')}</p>
             <p className="max-w-xl text-sm">{lecture.transcript ?? ''}</p>
           </Card>
         )}
@@ -244,8 +263,14 @@ export default function CoursePlayer() {
           >
             {SPEEDS.map((s) => <option key={s} value={s}>{s}x</option>)}
           </select>
-          <button className="btn-secondary" onClick={addBookmark}>🔖 {t('player.bookmark')}</button>
-          <button className="btn-secondary" onClick={markComplete}>✓ {t('player.markComplete')}</button>
+          <button className="btn-secondary" onClick={addBookmark}>
+            <BookmarkIcon />
+            {t('player.bookmark')}
+          </button>
+          <button className="btn-secondary" onClick={markComplete}>
+            <Check />
+            {t('player.markComplete')}
+          </button>
           {next && (
             <button className="btn-primary" onClick={() => navigate(`/learn/${courseId}/${next.id}`)}>
               {t('player.nextLecture')}
@@ -263,17 +288,17 @@ export default function CoursePlayer() {
         {/* Instructor-uploaded material (FR-I2) */}
         {lecture.resource_urls && lecture.resource_urls.length > 0 && (
           <Card>
-            <h2 className="mb-3 font-semibold">📎 {t('player.material')}</h2>
+            <h2 className="mb-3 font-semibold">{t('player.material')}</h2>
             <ul className="space-y-2">
               {lecture.resource_urls.map((url) => (
                 <li key={url}>
                   <a
-                    href={url}
+                    href={mediaUrl(url)}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-2 text-sm text-brand-600 hover:underline"
                   >
-                    <span aria-hidden="true">{resourceIcon(url)}</span>
+                    <ResourceIcon url={url} className="h-4 w-4 shrink-0 text-slate-400" />
                     <span>{resourceLabel(url)}</span>
                   </a>
                 </li>
@@ -308,13 +333,19 @@ export default function CoursePlayer() {
             {notes.data?.items.map((n) => (
               <li key={n.id} className="flex items-start justify-between gap-3 text-sm">
                 <button
-                  className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+                  className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs hover:bg-slate-200 dark:bg-ink-800 dark:hover:bg-slate-700"
                   onClick={() => seekTo(n.timestamp_seconds)}
                 >
                   {fmt(n.timestamp_seconds)}
                 </button>
                 <span className="flex-1">{n.content}</span>
-                <button aria-label={t('player.deleteNote')} className="text-slate-400 hover:text-red-500" onClick={() => deleteNote(n.id)}>✕</button>
+                <button
+                  aria-label={t('player.deleteNote')}
+                  className="text-slate-400 transition hover:text-red-500"
+                  onClick={() => deleteNote(n.id)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </li>
             ))}
             {notes.data?.items.length === 0 && (
@@ -328,11 +359,18 @@ export default function CoursePlayer() {
           <h2 className="mb-3 font-semibold">{t('player.bookmarks')}</h2>
           <ul className="flex flex-wrap gap-2">
             {bookmarks.data?.items.map((b) => (
-              <li key={b.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs dark:bg-slate-800">
-                <button className="font-mono hover:underline" onClick={() => seekTo(b.timestamp_seconds)}>
-                  ⏱ {fmt(b.timestamp_seconds)}
+              <li key={b.id} className="flex items-center gap-1 rounded-sm border border-slate-300/70 px-3 py-1 text-xs dark:border-white/15">
+                <button className="flex items-center gap-1 font-mono hover:underline" onClick={() => seekTo(b.timestamp_seconds)}>
+                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                  {fmt(b.timestamp_seconds)}
                 </button>
-                <button aria-label={t('player.removeBookmark')} className="text-slate-400 hover:text-red-500" onClick={() => deleteBookmark(b.id)}>✕</button>
+                <button
+                  aria-label={t('player.removeBookmark')}
+                  className="text-slate-400 transition hover:text-red-500"
+                  onClick={() => deleteBookmark(b.id)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </li>
             ))}
             {bookmarks.data?.items.length === 0 && (
@@ -356,12 +394,13 @@ export default function CoursePlayer() {
               {m.lectures.map((l) => (
                 <li key={l.id}>
                   <button
-                    className={`w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                      l.id === lectureId ? 'bg-brand-50 font-medium text-brand-700 dark:bg-slate-800 dark:text-brand-100' : ''
+                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                      l.id === lectureId ? 'bg-paper-sunk font-medium text-slate-900 dark:bg-ink-800 dark:text-white' : ''
                     }`}
                     onClick={() => navigate(`/learn/${courseId}/${l.id}`)}
                   >
-                    🎬 {l.title}
+                    <Video className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span className="truncate">{l.title}</span>
                   </button>
                 </li>
               ))}
@@ -372,9 +411,10 @@ export default function CoursePlayer() {
                   <Link
                     key={q.id}
                     to={`/quiz/${q.id}`}
-                    className="block rounded-lg px-2 py-1.5 text-sm text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-brand-600 transition hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    📝 {q.title} ({q.question_count} Qs)
+                    <ClipboardCheck className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span className="truncate">{q.title} ({q.question_count} Qs)</span>
                   </Link>
                 ))}
               </div>
@@ -382,9 +422,11 @@ export default function CoursePlayer() {
           </Card>
         ))}
         <Card>
-          <div className="mb-1 text-xs uppercase text-slate-400">Course progress</div>
+          <div className="eyebrow mb-1">{t('dashboard.progress')}</div>
           <ProgressBar percent={courseProgress.data ?? 0} />
-          <p className="mt-1 text-xs text-slate-400">{Math.round(courseProgress.data ?? 0)}% complete</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {t('dashboard.percentComplete', { value: Math.round(courseProgress.data ?? 0) })}
+          </p>
         </Card>
       </aside>
     </div>

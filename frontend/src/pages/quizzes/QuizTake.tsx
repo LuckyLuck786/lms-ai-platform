@@ -5,6 +5,7 @@ import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { AttemptSubmission, Quiz } from '../../utils/types';
 import { useI18n } from '../../utils/i18n';
+import { Check, X } from '../../components/common/Icon';
 
 type Selections = Record<string, string[]>; // question_id -> option_ids
 
@@ -95,9 +96,7 @@ export default function QuizTake() {
           </div>
           {result.score !== null && (
             <p className="text-slate-500">
-              {result.score >= 70
-                ? `🎉 ${t('quiz.passed')}!`
-                : t('quiz.keepPractising')}
+              {result.score >= 70 ? `${t('quiz.passed')}!` : t('quiz.keepPractising')}
             </p>
           )}
           <div className="mt-6 flex justify-center gap-3">
@@ -121,11 +120,17 @@ export default function QuizTake() {
                       outcome?.is_correct === null
                         ? 'text-slate-400'
                         : outcome?.is_correct
-                          ? 'text-emerald-600'
+                          ? 'text-emerald-800 dark:text-emerald-400'
                           : 'text-red-500'
                     }
                   >
-                    {outcome?.is_correct === null ? t('quiz.ungraded') : outcome?.is_correct ? '✓' : '✕'}
+                    {outcome?.is_correct === null ? (
+                      t('quiz.ungraded')
+                    ) : outcome?.is_correct ? (
+                      <Check className="h-4 w-4 text-emerald-800 dark:text-emerald-400" />
+                    ) : (
+                      <X className="h-4 w-4 text-red-700 dark:text-red-400" />
+                    )}
                   </span>
                 </li>
               );
@@ -163,7 +168,7 @@ export default function QuizTake() {
               <h2 className="font-semibold">
                 {i + 1}. {q.question_text}
               </h2>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs uppercase dark:bg-slate-800">
+              <span className="chip shrink-0 uppercase">
                 {q.question_type === 'mcq'
                   ? t('quiz.typeSingle')
                   : q.question_type === 'multi_select'
@@ -188,7 +193,7 @@ export default function QuizTake() {
                   {q.options.map((o) => (
                     <label
                       key={o.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-300/70 px-3 py-2 text-sm hover:bg-paper-sunk dark:border-slate-700 dark:hover:bg-slate-800"
                     >
                       <input
                         type={q.question_type === 'mcq' ? 'radio' : 'checkbox'}

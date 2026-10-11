@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { AppNotification } from '../../utils/types';
 import { useI18n } from '../../utils/i18n';
+import { Bell } from './Icon';
 
 /** In-app notification bell (PRD §3.1 notifications): unread badge + list. */
 export default function NotificationBell() {
@@ -35,12 +36,12 @@ export default function NotificationBell() {
         type="button"
         aria-label={unread ? `${t('notifications.title')} (${unread})` : t('notifications.title')}
         onClick={() => setOpen((o) => !o)}
-        className="relative rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100
-          dark:border-slate-700 dark:hover:bg-slate-800"
+        className="relative rounded-lg border border-slate-300 p-2 text-slate-600 transition hover:bg-slate-100
+          dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.06]"
       >
-        🔔
+        <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-sm bg-red-800 px-1 text-[10px] font-semibold text-white nums">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -52,14 +53,13 @@ export default function NotificationBell() {
           <div
             role="menu"
             aria-label={t('notifications.title')}
-            className="absolute right-0 z-20 mt-2 max-h-96 w-80 overflow-y-auto rounded-xl border
-              border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+            className="absolute right-0 z-20 mt-2 max-h-96 w-80 overflow-y-auto rounded-md border
+              border-slate-300/80 bg-paper-card p-2 shadow-pop dark:border-white/15 dark:bg-ink-900"
           >
             <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-sm font-semibold">{t('notifications.title')}</span>
-              {unread > 0 && (
+              <span className="text-sm font-semibold">{t('notifications.title')}</span>                  {unread > 0 && (
                 <button
-                  className="text-xs text-brand-600 hover:underline"
+                  className="text-xs text-brand-700 hover:underline dark:text-brand-300"
                   onClick={() => markAll.mutate()}
                   disabled={markAll.isPending}
                 >
@@ -80,7 +80,7 @@ export default function NotificationBell() {
                 onClick={() => {
                   if (!n.is_read) markRead.mutate(n.id);
                 }}
-                className={`w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-slate-50
+                className={`w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-paper-sunk
                   dark:hover:bg-slate-800 ${n.is_read ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-start gap-2">

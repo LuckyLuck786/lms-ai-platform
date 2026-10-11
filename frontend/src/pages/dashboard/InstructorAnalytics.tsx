@@ -4,6 +4,7 @@ import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { Course } from '../../utils/types';
 import { useI18n } from '../../utils/i18n';
+import { Search } from '../../components/common/Icon';
 
 interface LectureStat {
   id: string;
@@ -169,14 +170,14 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
                         </td>
                         <td className="py-2 pr-3">
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                            <div className="h-1.5 w-24 overflow-hidden rounded-sm bg-slate-300/60 dark:bg-white/10">
                               <div
-                                className={`h-1.5 rounded-full ${
+                                className={`h-1.5 rounded-sm ${
                                   lec.drop_off_percent >= 50
-                                    ? 'bg-rose-500'
+                                    ? 'bg-red-800'
                                     : lec.drop_off_percent > 0
-                                      ? 'bg-amber-500'
-                                      : 'bg-emerald-500'
+                                      ? 'bg-gold-500'
+                                      : 'bg-brand-700'
                                 }`}
                                 style={{ width: `${lec.drop_off_percent}%` }}
                               />
@@ -189,8 +190,9 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
                   </tbody>
                 </table>
                 {worstDropOff > 0 && (
-                  <p className="mt-2 text-xs text-slate-400">
-                    🔎 {t('instructor.analyticsHint')}
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                    <Search className="h-3.5 w-3.5 shrink-0" />
+                    {t('instructor.analyticsHint')}
                   </p>
                 )}
               </div>
@@ -224,14 +226,14 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
                         <td className="py-2 pr-3">{q.attempts}</td>
                         <td className="py-2 pr-3">
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                            <div className="h-1.5 w-24 overflow-hidden rounded-sm bg-slate-300/60 dark:bg-white/10">
                               <div
-                                className={`h-1.5 rounded-full ${
+                                className={`h-1.5 rounded-sm ${
                                   q.avg_score >= 70
-                                    ? 'bg-emerald-500'
+                                    ? 'bg-brand-700'
                                     : q.avg_score >= 40
-                                      ? 'bg-amber-500'
-                                      : 'bg-rose-500'
+                                      ? 'bg-gold-500'
+                                      : 'bg-red-800'
                                 }`}
                                 style={{ width: `${Math.min(100, q.avg_score)}%` }}
                               />

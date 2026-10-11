@@ -7,7 +7,6 @@ import { useAppDispatch } from '../../store/hooks';
 import { AuthResponse } from '../../utils/types';
 import { Alert, Card } from '../../components/common/ui';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../services/demo';
-import { DEMO_MODE } from '../../services/api';
 import { useI18n } from '../../utils/i18n';
 
 export default function Login() {
@@ -46,7 +45,8 @@ export default function Login() {
   return (
     <div className="mx-auto max-w-md">
       <Card>
-        <h1 className="mb-4 text-xl font-bold">{t('auth.login')}</h1>
+        <p className="eyebrow mb-1">{t('auth.signInEyebrow')}</p>
+        <h1 className="mb-4 font-display text-2xl text-ink-950 dark:text-white">{t('auth.login')}</h1>
         {formError && <div className="mb-4"><Alert>{formError}</Alert></div>}
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
@@ -79,40 +79,46 @@ export default function Login() {
             {mutation.isPending ? t('auth.loggingIn') : t('auth.login')}
           </button>
         </form>
-        <p className="mt-4 text-sm text-slate-500">
+        <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
           {t('auth.noAccount')}{' '}
-          <Link to="/register" className="font-medium text-brand-600 hover:underline">
+          <Link to="/register" className="link-quiet">
             {t('auth.register')}
           </Link>
         </p>
 
-        {DEMO_MODE && (
-          <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <div className="mb-2 text-xs uppercase text-slate-400">{t('auth.demoAccounts')}</div>
-            <div className="space-y-2">
-              {DEMO_ACCOUNTS.map((account) => (
-                <button
-                  key={account.email}
-                  type="button"
-                  onClick={() => signInAs(account.email)}
-                  disabled={mutation.isPending}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  <span className="min-w-0">
-                    <span className="font-medium">{account.label}</span>
-                    <span className="ml-2 text-xs text-slate-400">{account.email}</span>
-                  </span>
-                  <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">
-                    {account.hint}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-400">
-              {t('auth.demoPassword')} <code>{DEMO_PASSWORD}</code>
-            </p>
+        {/* These accounts exist in both the live API and the in-browser demo
+            backend, so the working product is one click away either way. */}
+        <div className="mt-6 border-t border-slate-300/70 pt-4 dark:border-white/10">
+          <div className="eyebrow mb-2">{t('auth.demoAccounts')}</div>
+          <div className="space-y-2">
+            {DEMO_ACCOUNTS.map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                onClick={() => signInAs(account.email)}
+                disabled={mutation.isPending}
+                className="flex w-full items-center justify-between gap-3 rounded-md border border-slate-300 px-3 py-2 text-left text-sm
+                  transition-colors hover:bg-paper-sunk disabled:opacity-60
+                  dark:border-white/15 dark:hover:bg-white/[0.05]"
+              >
+                <span className="min-w-0">
+                  <span className="font-medium">{account.label}</span>
+                  <span className="ml-2 text-xs text-slate-400">{account.email}</span>
+                </span>
+                <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">
+                  {account.hint}
+                </span>
+              </button>
+            ))}
           </div>
-        )}
+          <p className="mt-2 text-xs text-slate-400">
+            {t('auth.demoPassword')} <code className="font-mono">{DEMO_PASSWORD}</code>
+          </p>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            {t('auth.browsePublic')}{' '}
+            <Link to="/catalog" className="link-quiet">{t('nav.catalog')}</Link>
+          </p>
+        </div>
       </Card>
     </div>
   );

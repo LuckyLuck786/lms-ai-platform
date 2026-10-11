@@ -32,3 +32,17 @@ app.include_router(recommendations.router, prefix="/api/v1/ai", tags=["ai-recomm
 @app.get("/health", tags=["health"])
 def health() -> dict:
     return {"status": "ok", "service": "ai-service"}
+
+
+@app.get("/", tags=["health"])
+def root() -> dict:
+    """Landing response — the API lives under /api/v1/ai; without this the
+    root URL looks broken to anyone checking the service by hand."""
+    return {
+        "service": "ai-service",
+        "status": "ok",
+        "version": "0.1.0",
+        "api": "/api/v1/ai",
+        "docs": "/docs",
+        "health": "/health",
+    }

@@ -6,6 +6,29 @@ import { demoAdapter, isDemoMode } from './demo';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
+/** Origin that serves uploaded media (`/uploads/*`) — the API host, not the SPA host. */
+export const API_ORIGIN = (() => {
+  try {
+    return new URL(API_BASE_URL, window.location.origin).origin;
+  } catch {
+    return '';
+  }
+})();
+
+/**
+ * Uploaded lecture material is stored as a backend-relative path
+ * (`/uploads/lectures/<id>.mp4`). Left relative, the browser would fetch it
+ * from the SPA origin (where it resolves to the app shell), so media URLs are
+ * always resolved against the API origin. Absolute and object URLs pass
+ * through untouched, and demo mode keeps its in-browser blob URLs.
+ */
+export function mediaUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (/^(https?:|blob:|data:)/i.test(url)) return url;
+  if (DEMO_MODE) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 /** True when no backend is configured and API calls are served from the browser. */
 export const DEMO_MODE = isDemoMode();
 

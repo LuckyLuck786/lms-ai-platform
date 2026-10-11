@@ -208,6 +208,17 @@ function requireThreadAccess(s: DemoState, user: DemoAccount, threadId: string):
 const enrolmentCount = (s: DemoState, courseId: string): number =>
   s.enrollments.filter((e) => e.course_id === courseId).length;
 
+/** Mean learner rating + count for a course (FR-S3). */
+const ratingsFor = (s: DemoState, courseId: string) =>
+  s.ratings.filter((r) => r.course_id === courseId);
+
+function ratingSummary(s: DemoState, courseId: string): { avg_rating: number; rating_count: number } {
+  const rows = ratingsFor(s, courseId);
+  if (!rows.length) return { avg_rating: 0, rating_count: 0 };
+  const mean = rows.reduce((sum, r) => sum + r.rating, 0) / rows.length;
+  return { avg_rating: Math.round(mean * 10) / 10, rating_count: rows.length };
+}
+
 /** Every quiz that belongs to one of the course's modules. */
 const stateQuizzesForCourse = (s: DemoState, courseId: string): Quiz[] => {
   const course = s.courses.find((c) => c.id === courseId);
@@ -219,7 +230,11 @@ const stateQuizzesForCourse = (s: DemoState, courseId: string): Quiz[] => {
 /** Strip the nested collections the list endpoint never returns. */
 function courseListItem(s: DemoState, c: CourseDetail): Course {
   const { modules: _m, assignments: _a, instructor_id: _i, ...rest } = c;
-  return { ...rest, enrollment_count: c.enrollment_count ?? enrolmentCount(s, c.id) };
+  return {
+    ...rest,
+    enrollment_count: c.enrollment_count ?? enrolmentCount(s, c.id),
+    ...ratingSummary(s, c.id),
+  };
 }
 
 /** Strip `is_correct` from option rows, exactly like the real quiz endpoint. */
@@ -420,6 +435,10 @@ route('GET', '/courses', ({ state: s, query }) => {
   if (q) items = items.filter((c) => `${c.title} ${c.description ?? ''}`.toLowerCase().includes(q));
   if (query.category) items = items.filter((c) => c.category === query.category);
   if (query.difficulty) items = items.filter((c) => c.difficulty === query.difficulty);
+  const minRating = Number(query.minRating ?? 0) || 0;
+  if (minRating > 1) {
+    items = items.filter((c) => ratingSummary(s, c.id).avg_rating >= minRating);
+  }
 
   const start = (page - 1) * limit;
   return {
@@ -442,7 +461,7 @@ route('POST', '/courses', ({ state: s, body }) => {
     description: str(body.description).trim() || null,
     category: str(body.category).trim() || null,
     difficulty: str(body.difficulty) || null,
-    thumbnail_url: null,
+    thumbnail_url: str(body.thumbnail_url).trim() || null,
     price: num(body.price).toFixed(2),
     status: instructor.roles.includes('admin') ? 'approved' : 'pending',
     created_at: new Date().toISOString(),
@@ -456,7 +475,85 @@ route('POST', '/courses', ({ state: s, body }) => {
   return course;
 });
 
-route('GET', '/courses/:id', ({ state: s, params }) => findCourse(s, params.id));
+route('GET', '/courses/:id', ({ state: s, params }) => {
+  const course = findCourse(s, params.id);
+  const me = currentUser(s);
+  const mine = me ? ratingsFor(s, course.id).find((r) => r.user_id === me.id) : undefined;
+  return {
+    ...course,
+    ...ratingSummary(s, course.id),
+    my_rating: mine?.rating ?? null,
+    my_review: mine?.comment ?? null,
+  };
+});
+
+// --- ratings (FR-S3) -------------------------------------------------------
+
+route('GET', '/courses/:id/ratings', ({ state: s, params }) => {
+  const course = findCourse(s, params.id);
+  const me = currentUser(s);
+  const rows = ratingsFor(s, course.id);
+  const mine = me ? rows.find((r) => r.user_id === me.id) : undefined;
+  const { avg_rating, rating_count } = ratingSummary(s, course.id);
+  return {
+    average: avg_rating,
+    count: rating_count,
+    items: rows
+      .filter((r) => !!r.comment)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, 20)
+      .map(({ learner_name, rating, comment, updated_at }) => ({
+        learner_name,
+        rating,
+        comment,
+        updated_at,
+      })),
+    mine: mine ? { rating: mine.rating, comment: mine.comment } : null,
+  };
+});
+
+route('POST', '/courses/:id/ratings', ({ state: s, params, body }) => {
+  const user = requireUser(s);
+  const course = findCourse(s, params.id);
+  const enrolled = s.enrollments.some(
+    (e) => e.user_id === user.id && e.course_id === course.id,
+  );
+  const allowed =
+    enrolled || course.instructor_id === user.id || user.roles.includes('admin');
+  if (!allowed) {
+    throw new HttpError(403, 'FORBIDDEN', 'Only enrolled learners can rate this course');
+  }
+
+  const rating = Math.round(num(body.rating));
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    throw new HttpError(422, 'VALIDATION', 'rating must be between 1 and 5');
+  }
+  const comment = str(body.comment).trim() || null;
+
+  const existing = s.ratings.find((r) => r.course_id === course.id && r.user_id === user.id);
+  if (existing) {
+    existing.rating = rating;
+    existing.comment = comment;
+    existing.updated_at = new Date().toISOString();
+  } else {
+    s.ratings.push({
+      id: nextId('r'),
+      course_id: course.id,
+      user_id: user.id,
+      learner_name: user.full_name,
+      rating,
+      comment,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  const { avg_rating, rating_count } = ratingSummary(s, course.id);
+  return {
+    average: avg_rating,
+    count: rating_count,
+    mine: { rating, comment },
+  };
+});
 
 route('POST', '/courses/:id/enroll', ({ state: s, params }) => {
   const user = requireUser(s);

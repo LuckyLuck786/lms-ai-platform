@@ -61,6 +61,14 @@ export const env = {
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
   },
 
+  // Durable object storage for uploaded material. When GCS_BUCKET is set the
+  // storage driver writes to Google Cloud Storage using the runtime service
+  // account (Application Default Credentials) instead of the container disk,
+  // which Cloud Run wipes on every redeploy.
+  gcs: {
+    bucket: process.env.GCS_BUCKET ?? '',
+  },
+
   smtp: {
     // Empty means "no SMTP configured" — email is logged dry-run instead of
     // failing. Mailpit locally (smtp://localhost:1025), any provider in prod.
@@ -69,6 +77,14 @@ export const env = {
     fromName: process.env.EMAIL_FROM_NAME ?? 'Vertexon LMS-AI',
     // Base URL used to build deep links inside transactional email.
     appUrl: process.env.APP_URL ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  },
+
+  razorpay: {
+    // Test-mode keys for development; swap for live keys in production.
+    // The webhook secret is used to verify incoming payment webhooks.
+    keyId: process.env.RAZORPAY_KEY_ID ?? '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? '',
   },
 
   rateLimits: {

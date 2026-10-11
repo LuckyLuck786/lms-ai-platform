@@ -2,6 +2,13 @@ import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card } from '../../components/common/ui';
+import { X } from '../../components/common/Icon';
+
+/** A rubric criterion row while it is being authored. */
+interface RubricRow {
+  criterion: string;
+  weight: string;
+}
 import { Course } from '../../utils/types';
 import { useI18n } from '../../utils/i18n';
 
@@ -33,6 +40,21 @@ const emptyQuestion = (): DraftQuestion => ({
     { option_text: '', is_correct: false },
   ],
 });
+
+/** Numbered step heading — a designed badge instead of an emoji digit. */
+function Step({ n, label }: { n: number; label: string }) {
+  return (
+    <h3 className="mb-3 flex items-center gap-2 font-semibold">
+      <span
+        aria-hidden="true"
+        className="flex h-6 w-6 items-center justify-center rounded-sm border border-slate-300 text-xs font-semibold text-slate-600 nums dark:border-white/15 dark:text-slate-300"
+      >
+        {n}
+      </span>
+      {label}
+    </h3>
+  );
+}
 
 export default function InstructorContentTools({ courses }: { courses: Course[] }) {
   const { t } = useI18n();
@@ -171,20 +193,32 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
     onError: (e) => setError(apiErrorMessage(e)),
   });
 
-  // --- assignment ---
+  // --- assignment (FR-I3: title, deadline, instructions + weighted rubric) ---
   const [assignment, setAssignment] = useState({ title: '', instructions: '', due_date: '' });
+  const [rubric, setRubric] = useState<RubricRow[]>([]);
+  const setCriterion = (index: number, patch: Partial<RubricRow>) =>
+    setRubric((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+
   const createAssignment = useMutation({
-    mutationFn: async () =>
-      (
+    mutationFn: async () => {
+      // Only complete, positively-weighted criteria are sent — a half-filled
+      // row would fail the API's rubric schema.
+      const criteria = rubric
+        .map((row) => ({ criterion: row.criterion.trim(), weight: Number(row.weight) }))
+        .filter((row) => row.criterion && Number.isFinite(row.weight) && row.weight > 0);
+      return (
         await api.post('/assignments', {
           course_id: courseId,
           title: assignment.title,
           instructions: assignment.instructions || undefined,
           due_date: assignment.due_date ? new Date(assignment.due_date).toISOString() : undefined,
+          rubric: criteria.length ? criteria : undefined,
         })
-      ).data,
+      ).data;
+    },
     onSuccess: () => {
       setAssignment({ title: '', instructions: '', due_date: '' });
+      setRubric([]);
       setSuccess(t('tools.assignmentCreated'));
       setError(null);
     },
@@ -207,7 +241,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
             setError(null);
           }}
         >
-          <option value="">— select a course —</option>
+          <option value="">Select a course</option>
           {courses.map((c) => (
             <option key={c.id} value={c.id}>{c.title} ({c.status})</option>
           ))}
@@ -223,7 +257,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
         <>
           {/* Module */}
           <Card>
-            <h3 className="mb-3 font-semibold">1️⃣ {t('tools.module')}</h3>
+            <Step n={1} label={t('tools.module')} />
             <div className="flex gap-2">
               <input
                 className="input flex-1"
@@ -239,7 +273,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
 
           {/* Lecture */}
           <Card>
-            <h3 className="mb-3 font-semibold">2️⃣ {t('tools.lecture')}</h3>
+            <Step n={2} label={t('tools.lecture')} />
             <div className="grid gap-3 sm:grid-cols-2">
               <select
                 className="input"
@@ -314,7 +348,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
 
           {/* Attach material to an existing lecture (FR-I2) */}
           <Card>
-            <h3 className="mb-3 font-semibold">📎 {t('tools.attachMaterial')}</h3>
+            <h3 className="mb-3 font-semibold">{t('tools.attachMaterial')}</h3>
             <p className="mb-3 text-sm text-slate-500">{t('tools.attachHint')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <select
@@ -351,7 +385,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
 
           {/* Quiz builder */}
           <Card>
-            <h3 className="mb-3 font-semibold">3️⃣ {t('tools.quiz')}</h3>
+            <Step n={3} label={t('tools.quiz')} />
             <div className="mb-3 grid gap-3 sm:grid-cols-2">
               <select
                 className="input"
@@ -405,7 +439,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                       <button
                         className="btn-secondary"
                         onClick={() => setQuestions((qs) => qs.filter((_, i) => i !== qi))}
-                        aria-label={`${t('common.delete')} — ${qi + 1}`}
+                        aria-label={`${t('common.delete')}: ${qi + 1}`}
                       >
                         ✕
                       </button>
@@ -465,7 +499,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
 
           {/* Assignment */}
           <Card>
-            <h3 className="mb-3 font-semibold">4️⃣ {t('tools.assignment')}</h3>
+            <Step n={4} label={t('tools.assignment')} />
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 className="input"
@@ -488,6 +522,52 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                 onChange={(e) => setAssignment((a) => ({ ...a, instructions: e.target.value }))}
               />
             </div>
+
+            {/* Weighted rubric (FR-I3) */}
+            <div className="mt-4">
+              <p className="eyebrow mb-2">{t('tools.rubric')}</p>
+              {rubric.length === 0 && (
+                <p className="mb-2 text-xs text-slate-400">{t('tools.rubricHint')}</p>
+              )}
+              <ul className="space-y-2">
+                {rubric.map((row, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2">
+                    <input
+                      className="input flex-1"
+                      placeholder={t('tools.criterion')}
+                      value={row.criterion}
+                      aria-label={t('tools.criterion')}
+                      onChange={(e) => setCriterion(i, { criterion: e.target.value })}
+                    />
+                    <input
+                      className="input w-24"
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="%"
+                      value={row.weight}
+                      aria-label={t('tools.weight')}
+                      onChange={(e) => setCriterion(i, { weight: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      aria-label={t('common.delete')}
+                      className="text-slate-400 transition hover:text-red-500"
+                      onClick={() => setRubric((rows) => rows.filter((_, idx) => idx !== i))}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="btn-secondary mt-2"
+                onClick={() => setRubric((rows) => [...rows, { criterion: '', weight: '' }])}
+              >
+                {t('tools.addCriterion')}
+              </button>
+            </div>
             <button
               className="btn-primary mt-3"
               disabled={!assignment.title || createAssignment.isPending}
@@ -502,7 +582,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
 
           {/* Announcement (FR-I6) */}
           <Card>
-            <h3 className="mb-3 font-semibold">📣 {t('tools.announcement')}</h3>
+            <h3 className="mb-3 font-semibold">{t('tools.announcement')}</h3>
             <div className="flex gap-2">
               <textarea
                 className="input flex-1"

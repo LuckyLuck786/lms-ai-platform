@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Spinner } from '../common/ui';
 import { useI18n } from '../../utils/i18n';
+import { BarChart, Bot } from '../common/Icon';
+import Markdown from '../common/Markdown';
 
 interface Props {
   lectureId: string;
@@ -18,9 +20,9 @@ interface MasteryRow {
 }
 
 const DEPTH_COLOR: Record<string, string> = {
-  beginner: 'bg-rose-500',
-  intermediate: 'bg-amber-500',
-  advanced: 'bg-emerald-500',
+  beginner: 'bg-slate-400',
+  intermediate: 'bg-brand-500',
+  advanced: 'bg-brand-700',
 };
 
 /**
@@ -93,7 +95,7 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
     mutationFn: async () => (await api.post('/ai/study-plan', {})).data,
     onSuccess: (d: { plan: { items: { module_title: string; reason: string; priority: string }[] } }) => {
       setActive('plan');
-      setPlan(d.plan.items.map((i) => `${i.module_title} — ${i.reason}`));
+      setPlan(d.plan.items.map((i) => `${i.module_title}: ${i.reason}`));
       setError(null);
     },
     onError: (e) => setError(apiErrorMessage(e)),
@@ -104,7 +106,10 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
 
   return (
     <section aria-label={t('player.aiTools')} className="card">
-      <h2 className="mb-3 font-semibold">🤖 {t('player.aiTools')}</h2>
+      <h2 className="mb-3 flex items-center gap-2 font-semibold">
+        <Bot className="text-slate-400" />
+        {t('player.aiTools')}
+      </h2>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
 
       <div className="flex flex-wrap gap-2">
@@ -124,7 +129,7 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
 
       {pending && <div className="mt-3"><Spinner /></div>}
       {message && active === 'quiz' && (
-        <p className="mt-3 text-sm text-emerald-600">
+        <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
           {message}{' '}
           <button
             className="underline"
@@ -136,8 +141,8 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
       )}
 
       {active === 'summary' && summary && (
-        <div className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
-          {summary}
+        <div className="mt-3 rounded-lg bg-paper-sunk p-3 text-sm dark:bg-ink-800/60">
+          <Markdown content={summary} />
         </div>
       )}
 
@@ -158,9 +163,10 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
         </ol>
       )}
 
-      <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-        <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          📊 {t('ai.topicMastery')}
+      <div className="mt-4 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+        <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-caps text-slate-400">
+          <BarChart className="text-slate-400" />
+          {t('ai.topicMastery')}
         </h3>
         {mastery.isLoading ? (
           <Spinner className="h-4 w-4" />
@@ -176,7 +182,7 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
                     <span className="truncate text-slate-600 dark:text-slate-300">{row.module_title}</span>
                     <span className="shrink-0 font-medium">{score}%</span>
                   </div>
-                  <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-ink-800">
                     <div
                       className={`h-1.5 rounded-full ${DEPTH_COLOR[row.depth] ?? 'bg-slate-400'}`}
                       style={{ width: `${score}%` }}

@@ -14,16 +14,16 @@ export default function DemoBanner() {
   return (
     <div
       role="status"
-      className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      className="border-b border-slate-300/70 bg-paper-sunk px-4 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300"
     >
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1">
-        <strong className="font-semibold">{t('demo.title')}</strong>
+        <span className="eyebrow">{t('demo.title')}</span>
         <span>
           {t('demo.body', { email: DEMO_ACCOUNTS[0].email, password: DEMO_PASSWORD })}{' '}
           {t('demo.reset')}
         </span>
         <a
-          className="font-medium underline underline-offset-2"
+          className="font-medium underline underline-offset-2 hover:text-slate-900 dark:hover:text-white"
           href="https://github.com/LuckyLuck786/lms-ai-platform#readme"
           target="_blank"
           rel="noreferrer"

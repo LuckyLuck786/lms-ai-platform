@@ -10,11 +10,13 @@ import {
   CreateCourseInput,
   CreateLectureInput,
   CreateModuleInput,
+  RateCourseInput,
 } from './courses.schemas';
 
 const CATALOG_CACHE_TTL = 300; // 5 minutes (PRD §9.4)
 const catalogCacheKey = (q: CatalogQuery, role: string) =>
-  `catalog:${role}:q=${q.q ?? ''}:cat=${q.category ?? ''}:diff=${q.difficulty ?? ''}:p=${q.page}:l=${q.limit}:mine=${q.mine ?? ''}`;
+  `catalog:${role}:q=${q.q ?? ''}:cat=${q.category ?? ''}:diff=${q.difficulty ?? ''}` +
+  `:min=${q.minRating ?? ''}:p=${q.page}:l=${q.limit}:mine=${q.mine ?? ''}`;
 
 async function invalidateCatalogCache(): Promise<void> {
   await cacheDel('catalog:*');
@@ -50,37 +52,43 @@ export async function listCatalog(q: CatalogQuery, user?: AuthUser) {
     params.push(q.difficulty);
     where.push(`c.difficulty = $${params.length}`);
   }
+  const hasRating = typeof q.minRating === 'number' && q.minRating > 1;
+  if (hasRating) {
+    params.push(q.minRating);
+    where.push(`COALESCE(r.avg_rating, 0) >= $${params.length}`);
+  }
+
+  // Shared joins: enrollment counts + learner ratings (FR-S3).
+  const joins = `JOIN users u ON u.id = c.instructor_id
+     LEFT JOIN LATERAL (
+       SELECT count(*)::int AS enrollment_count FROM enrollments WHERE course_id = c.id
+     ) e ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT avg(rating) AS avg_rating, count(*)::int AS rating_count
+       FROM course_ratings WHERE course_id = c.id
+     ) r ON TRUE`;
 
   const offset = (q.page - 1) * q.limit;
-  params.push(q.limit, offset);
+  const itemParams = [...params, q.limit, offset];
 
   const items = await query(
     `SELECT c.id, c.title, c.description, c.category, c.difficulty, c.thumbnail_url,
             c.price, c.status, c.created_at,
             u.full_name AS instructor_name,
             COALESCE(e.enrollment_count, 0)::int AS enrollment_count,
-            COALESCE(a.avg_rating, 0)::float AS avg_rating
+            COALESCE(r.avg_rating, 0)::float AS avg_rating,
+            COALESCE(r.rating_count, 0)::int AS rating_count
      FROM courses c
-     JOIN users u ON u.id = c.instructor_id
-     LEFT JOIN LATERAL (
-       SELECT count(*)::int AS enrollment_count FROM enrollments WHERE course_id = c.id
-     ) e ON TRUE
-     LEFT JOIN LATERAL (
-       SELECT avg(score) AS avg_rating FROM quiz_attempts qa
-       JOIN quizzes qz ON qz.id = qa.quiz_id
-       JOIN modules m ON m.id = qz.module_id
-       WHERE m.course_id = c.id AND qa.score IS NOT NULL
-     ) a ON TRUE
+     ${joins}
      WHERE ${where.join(' AND ')}
      ORDER BY c.created_at DESC
-     LIMIT $${params.length - 1} OFFSET $${params.length}`,
-    params,
+     LIMIT $${itemParams.length - 1} OFFSET $${itemParams.length}`,
+    itemParams,
   );
 
-  const countParams = params.slice(0, params.length - 2);
   const countRow = await queryOne<{ count: string }>(
-    `SELECT count(*)::text AS count FROM courses c WHERE ${where.join(' AND ')}`,
-    countParams,
+    `SELECT count(*)::text AS count FROM courses c ${joins} WHERE ${where.join(' AND ')}`,
+    params,
   );
   const total = Number(countRow?.count ?? 0);
 
@@ -91,8 +99,16 @@ export async function listCatalog(q: CatalogQuery, user?: AuthUser) {
 
 export async function getCourseDetail(id: string, user?: AuthUser) {
   const course = await queryOne(
-    `SELECT c.*, u.full_name AS instructor_name, u.email AS instructor_email
-     FROM courses c JOIN users u ON u.id = c.instructor_id WHERE c.id = $1`,
+    `SELECT c.*, u.full_name AS instructor_name, u.email AS instructor_email,
+            COALESCE(r.avg_rating, 0)::float AS avg_rating,
+            COALESCE(r.rating_count, 0)::int AS rating_count
+     FROM courses c
+     JOIN users u ON u.id = c.instructor_id
+     LEFT JOIN LATERAL (
+       SELECT avg(rating) AS avg_rating, count(*)::int AS rating_count
+       FROM course_ratings WHERE course_id = c.id
+     ) r ON TRUE
+     WHERE c.id = $1`,
     [id],
   );
   if (!course) throw notFound('Course not found');
@@ -127,8 +143,18 @@ export async function getCourseDetail(id: string, user?: AuthUser) {
     [id],
   );
 
+  // The learner's own rating (FR-S3) so the detail page can pre-fill the widget.
+  const myRating = user
+    ? await queryOne<{ rating: number; comment: string | null }>(
+        'SELECT rating, comment FROM course_ratings WHERE course_id = $1 AND user_id = $2',
+        [id, user.id],
+      )
+    : null;
+
   return {
     ...course,
+    my_rating: myRating?.rating ?? null,
+    my_review: myRating?.comment ?? null,
     assignments,
     modules: modules.map((m) => ({
       ...(m as object),
@@ -136,6 +162,80 @@ export async function getCourseDetail(id: string, user?: AuthUser) {
       quizzes: quizzes.filter((q) => (q as { module_id: string }).module_id === (m as { id: string }).id),
     })),
   };
+}
+
+/** Aggregate rating stats for a course (FR-S3). */
+async function ratingSummary(courseId: string) {
+  const row = await queryOne<{ avg_rating: number; rating_count: number }>(
+    `SELECT COALESCE(avg(rating), 0)::float AS avg_rating, count(*)::int AS rating_count
+     FROM course_ratings WHERE course_id = $1`,
+    [courseId],
+  );
+  return {
+    average: Math.round((row?.avg_rating ?? 0) * 10) / 10,
+    count: row?.rating_count ?? 0,
+  };
+}
+
+/**
+ * GET /courses/:id/ratings — rating summary plus written reviews, and the
+ * caller's own rating so the UI can show "your rating" (FR-S3).
+ */
+export async function listCourseRatings(courseId: string, user?: AuthUser) {
+  const course = await queryOne('SELECT id FROM courses WHERE id = $1', [courseId]);
+  if (!course) throw notFound('Course not found');
+
+  const items = await query(
+    `SELECT r.rating, r.comment, r.updated_at, u.full_name AS learner_name
+     FROM course_ratings r
+     JOIN users u ON u.id = r.user_id
+     WHERE r.course_id = $1 AND r.comment IS NOT NULL AND r.comment <> ''
+     ORDER BY r.updated_at DESC
+     LIMIT 20`,
+    [courseId],
+  );
+  const mine = user
+    ? await queryOne<{ rating: number; comment: string | null }>(
+        'SELECT rating, comment FROM course_ratings WHERE course_id = $1 AND user_id = $2',
+        [courseId, user.id],
+      )
+    : null;
+
+  return { ...(await ratingSummary(courseId)), items, mine: mine ?? null };
+}
+
+/**
+ * POST /courses/:id/ratings — enrolled learners (and the course owner/admin)
+ * rate a course 1-5 with an optional review. Re-rating updates the row, and
+ * the catalog cache is invalidated so rating filters stay honest.
+ */
+export async function rateCourse(user: AuthUser, courseId: string, input: RateCourseInput) {
+  const course = await queryOne<{ id: string; instructor_id: string }>(
+    'SELECT id, instructor_id FROM courses WHERE id = $1',
+    [courseId],
+  );
+  if (!course) throw notFound('Course not found');
+
+  const enrolled = await queryOne('SELECT 1 FROM enrollments WHERE user_id = $1 AND course_id = $2', [
+    user.id,
+    courseId,
+  ]);
+  const allowed =
+    !!enrolled || course.instructor_id === user.id || hasRole(user, 'admin');
+  if (!allowed) throw forbidden('Only enrolled learners can rate this course');
+
+  const comment = input.comment?.trim() ? input.comment.trim() : null;
+  const row = await queryOne<{ rating: number; comment: string | null }>(
+    `INSERT INTO course_ratings (course_id, user_id, rating, comment)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (course_id, user_id)
+     DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, updated_at = now()
+     RETURNING rating, comment`,
+    [courseId, user.id, input.rating, comment],
+  );
+
+  await invalidateCatalogCache();
+  return { ...(await ratingSummary(courseId)), mine: row };
 }
 
 async function getOwnedCourse(courseId: string, user: AuthUser, adminOverride = true) {

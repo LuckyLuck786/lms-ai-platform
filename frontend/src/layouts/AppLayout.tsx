@@ -7,10 +7,10 @@ import DemoBanner from '../components/common/DemoBanner';
 import { useI18n, Locale } from '../utils/i18n';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-2 text-sm font-medium transition ${
+  `border-b-2 px-3 py-2 text-sm transition-colors ${
     isActive
-      ? 'bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-100'
-      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+      ? 'border-brand-700 font-medium text-slate-900 dark:border-brand-400 dark:text-white'
+      : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
   }`;
 
 /** Top-level chrome: brand, nav, user menu, theme toggle. */
@@ -29,17 +29,17 @@ export default function AppLayout() {
     <div className="min-h-screen">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-white"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-brand-700 focus:px-4 focus:py-2 focus:text-white"
       >
         {t('app.skipToContent')}
       </a>
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+      <header className="border-b border-slate-300/70 bg-paper-card dark:border-white/10 dark:bg-ink-900">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           <Link
             to="/"
-            className="whitespace-nowrap text-lg font-bold text-brand-700 dark:text-brand-100"
+            className="whitespace-nowrap font-display text-lg font-semibold text-slate-900 dark:text-white"
           >
-            Vertexon <span className="text-slate-400">LMS-AI</span>
+            Vertexon <span className="text-slate-500 dark:text-slate-400">LMS-AI</span>
           </Link>
           {/* Sits inline on wide screens and wraps onto its own row on narrow ones. */}
           <nav
@@ -69,8 +69,8 @@ export default function AppLayout() {
             </label>
             <select
               id="lang-select"
-              className="rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 text-sm
-                dark:border-slate-700"
+              className="rounded-md border border-slate-300 bg-transparent px-2 py-1.5 text-sm
+                dark:border-white/15"
               value={locale}
               onChange={(e) => setLocale(e.target.value as Locale)}
             >
@@ -82,8 +82,11 @@ export default function AppLayout() {
             {user && <NotificationBell />}
             {user ? (
               <>
-                <span className="hidden text-sm text-slate-600 sm:inline dark:text-slate-300">
-                  {user.full_name} · <span className="uppercase text-xs">{user.role}</span>
+                <span className="hidden text-sm text-slate-600 sm:inline dark:text-slate-400">
+                  {user.full_name}
+                  <span className="ml-1 text-[11px] uppercase tracking-caps text-slate-400">
+                    {user.role}
+                  </span>
                 </span>
                 <button type="button" onClick={logout} className="btn-secondary">
                   {t('auth.logout')}
@@ -101,8 +104,15 @@ export default function AppLayout() {
       <main id="main-content" className="mx-auto max-w-6xl px-4 py-8">
         <Outlet />
       </main>
-      <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400 dark:border-slate-800">
-        {t('app.footer')}
+      <footer className="mt-12 border-t border-slate-300/70 py-6 dark:border-white/10">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 text-xs text-slate-500 dark:text-slate-400">
+          <span>{t('app.footer')}</span>
+          <nav aria-label={t('legal.title')} className="flex items-center gap-4">
+            <Link to="/terms" className="link-quiet">{t('legal.terms')}</Link>
+            <Link to="/privacy" className="link-quiet">{t('legal.privacy')}</Link>
+            <Link to="/catalog" className="link-quiet">{t('nav.catalog')}</Link>
+          </nav>
+        </div>
       </footer>
     </div>
   );

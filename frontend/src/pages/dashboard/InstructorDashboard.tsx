@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { Course } from '../../utils/types';
+import { GraduationCap } from '../../components/common/Icon';
 import InstructorContentTools from './InstructorContentTools';
 import InstructorAnalytics from './InstructorAnalytics';
 import { useI18n } from '../../utils/i18n';
@@ -18,6 +19,7 @@ export default function InstructorDashboard() {
     description: '',
     category: 'Computer Science',
     difficulty: 'beginner',
+    thumbnail_url: '',
     price: '0',
   });
 
@@ -29,10 +31,22 @@ export default function InstructorDashboard() {
 
   const create = useMutation({
     mutationFn: async () =>
-      (await api.post('/courses', { ...form, price: Number(form.price) })).data,
+      (await api.post('/courses', {
+        ...form,
+        // Empty string means "no thumbnail" — the schema accepts '' literally.
+        thumbnail_url: form.thumbnail_url.trim() || '',
+        price: Number(form.price),
+      })).data,
     onSuccess: () => {
       setFormError(null);
-      setForm({ title: '', description: '', category: 'Computer Science', difficulty: 'beginner', price: '0' });
+      setForm({
+        title: '',
+        description: '',
+        category: 'Computer Science',
+        difficulty: 'beginner',
+        thumbnail_url: '',
+        price: '0',
+      });
       queryClient.invalidateQueries({ queryKey: ['courses', 'mine'] });
       queryClient.invalidateQueries({ queryKey: ['catalog'] });
     },
@@ -75,6 +89,17 @@ export default function InstructorDashboard() {
               <option value="advanced">{t('catalog.difficulty.advanced')}</option>
             </select>
           </div>
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor="thumbnail_url">{t('instructor.thumbnail')}</label>
+            <input
+              id="thumbnail_url"
+              type="url"
+              className="input"
+              placeholder="https://…/cover.jpg"
+              value={form.thumbnail_url}
+              onChange={set('thumbnail_url')}
+            />
+          </div>
           <div>
             <label className="label" htmlFor="price">{t('instructor.price')}</label>
             <input id="price" type="number" min={0} step="0.01" className="input" value={form.price} onChange={set('price')} />
@@ -92,16 +117,32 @@ export default function InstructorDashboard() {
         {myCourses.isLoading ? (
           <div className="flex justify-center py-8"><Spinner /></div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             {myCourses.data?.items.map((c) => (
-              <Link key={c.id} to={`/catalog/${c.id}`} className="card transition hover:shadow-md">
-                <h3 className="font-semibold">{c.title}</h3>
-                <p className="mt-1 text-xs text-slate-400">
-                  {t('instructor.status')}{' '}
-                  <span className={c.status === 'approved' ? 'text-emerald-600' : 'text-amber-600'}>
-                    {c.status}
-                  </span>
-                </p>
+              <Link key={c.id} to={`/catalog/${c.id}`} className="card card-hover overflow-hidden p-0">
+                <div className="relative aspect-[16/9] bg-paper-sunk dark:bg-ink-800">
+                  {c.thumbnail_url ? (
+                    <img src={c.thumbnail_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-white/25">
+                      <GraduationCap size={30} />
+                    </span>
+                  )}
+                </div>
+                <div className="p-5">
+                  <h3 className="font-semibold leading-snug">{c.title}</h3>
+                  <p className="mt-1.5 text-xs">
+                    <span className="chip capitalize">
+                      <span
+                        aria-hidden="true"
+                        className={`h-1.5 w-1.5 rounded-sm ${
+                          c.status === 'approved' ? 'bg-emerald-800' : 'bg-gold-500'
+                        }`}
+                      />
+                      {c.status}
+                    </span>
+                  </p>
+                </div>
               </Link>
             ))}
             {myCourses.data?.items.length === 0 && (

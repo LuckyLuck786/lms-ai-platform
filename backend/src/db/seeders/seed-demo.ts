@@ -248,12 +248,12 @@ async function main(): Promise<void> {
     await query('INSERT INTO announcements (course_id, posted_by, content) VALUES ($1, $2, $3)', [
       courseId,
       instructor,
-      'Live Q&A session this Friday 7 PM — bring your API design questions!',
+      'Live Q&A session this Friday 7 PM. Bring your API design questions.',
     ]);
     await query(
       `INSERT INTO notifications (user_id, title, body)
        SELECT user_id, 'Announcement: Full-Stack Web Development Bootcamp',
-              'Live Q&A session this Friday 7 PM — bring your API design questions!'
+              'Live Q&A session this Friday 7 PM. Bring your API design questions.'
        FROM enrollments WHERE course_id = $1`,
       [courseId],
     );

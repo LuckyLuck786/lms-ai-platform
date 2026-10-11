@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, optionalAuthenticate, requireRole } from '../../middleware/auth';
-import { approveCourseSchema, catalogQuerySchema, createCourseSchema, createLectureSchema, createModuleSchema, updateCourseSchema } from './courses.schemas';
+import { approveCourseSchema, catalogQuerySchema, createCourseSchema, createLectureSchema, createModuleSchema, rateCourseSchema, updateCourseSchema } from './courses.schemas';
 import * as coursesService from './courses.service';
 
 export const coursesRouter = Router();
@@ -26,6 +26,24 @@ coursesRouter.get(
   optionalAuthenticate,
   wrap(async (req, res) => {
     res.json(await coursesService.getCourseDetail(req.params.id, req.user));
+  }),
+);
+
+// ---- Ratings (FR-S3) -----------------------------------------------------
+coursesRouter.get(
+  '/:id/ratings',
+  optionalAuthenticate,
+  wrap(async (req, res) => {
+    res.json(await coursesService.listCourseRatings(req.params.id, req.user));
+  }),
+);
+
+coursesRouter.post(
+  '/:id/ratings',
+  authenticate,
+  wrap(async (req, res) => {
+    const input = rateCourseSchema.parse(req.body);
+    res.json(await coursesService.rateCourse(req.user!, req.params.id, input));
   }),
 );
 

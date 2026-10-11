@@ -29,12 +29,21 @@ export const catalogQuerySchema = z.object({
     (v) => (v === undefined || v === '' ? undefined : v),
     z.enum(['beginner', 'intermediate', 'advanced']).optional(),
   ),
+  minRating: z.preprocess(
+    (v) => (v === undefined || v === '' ? undefined : v),
+    z.coerce.number().min(1).max(5).optional(),
+  ),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(12),
   mine: z.preprocess(
     (v) => (v === undefined || v === '' || v === '0' || v === 'false' ? undefined : v),
     z.union([z.literal('1'), z.literal('true')]).optional(),
   ),
+});
+
+export const rateCourseSchema = z.object({
+  rating: z.coerce.number().int().min(1).max(5),
+  comment: z.string().trim().max(1000).optional().or(z.literal('')),
 });
 
 export const createModuleSchema = z.object({
@@ -83,3 +92,4 @@ export type CreateCourseInput = z.infer<typeof createCourseSchema>;
 export type CreateModuleInput = z.infer<typeof createModuleSchema>;
 export type CreateLectureInput = z.infer<typeof createLectureSchema>;
 export type ApproveCourseInput = z.infer<typeof approveCourseSchema>;
+export type RateCourseInput = z.infer<typeof rateCourseSchema>;

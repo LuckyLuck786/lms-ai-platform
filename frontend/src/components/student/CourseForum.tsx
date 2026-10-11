@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../common/ui';
 import { Announcement, DiscussionPost, DiscussionThread } from '../../utils/types';
+import { Flag, Trash } from '../common/Icon';
 
 interface Props {
   courseId: string;
@@ -76,7 +77,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <section aria-label="Discussion forum" className="space-y-4">
-        <h2 className="text-lg font-semibold">💬 Discussion forum</h2>
+        <h2 className="section-title">Discussion forum</h2>
         {error && <Alert>{error}</Alert>}
 
         {canPost && (
@@ -103,7 +104,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
 
         {threads.isLoading && <div className="flex justify-center py-6"><Spinner /></div>}
         {threads.data?.items?.length === 0 && (
-          <Card className="text-slate-500">No discussions yet — start one!</Card>
+          <Card className="text-slate-500">No discussions yet. Start one.</Card>
         )}
 
         {threads.data?.items.map((t) => (
@@ -128,7 +129,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
               <div className="mt-4 space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
                 {posts.isLoading && <Spinner className="h-4 w-4" />}
                 {posts.data?.items.map((p) => (
-                  <div key={p.id} className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+                  <div key={p.id} className="rounded-lg bg-paper-sunk p-3 text-sm dark:bg-ink-800/60">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{p.author_name}</span>
                       <span className="text-xs text-slate-400">
@@ -138,18 +139,24 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
                     <p className="mt-1 whitespace-pre-wrap">{p.content}</p>
                     <div className="mt-2 flex gap-3 text-xs">
                       {!p.is_flagged ? (
-                        <button className="text-slate-400 hover:text-amber-600" onClick={() => flag.mutate(p.id)}>
-                          🚩 Flag
+                        <button
+                          className="inline-flex items-center gap-1 text-slate-400 transition-colors hover:text-gold-600"
+                          onClick={() => flag.mutate(p.id)}
+                        >
+                          <Flag className="h-3.5 w-3.5" /> Flag
                         </button>
                       ) : (
-                        <span className="text-amber-600">🚩 flagged for review</span>
+                        <span className="inline-flex items-center gap-1 text-gold-600 dark:text-gold-400">
+                          <Flag />
+                          flagged for review
+                        </span>
                       )}
                       {canModerate && (
                         <button
-                          className="text-slate-400 hover:text-red-600"
+                          className="inline-flex items-center gap-1 text-slate-400 transition hover:text-red-600"
                           onClick={() => remove.mutate(p.id)}
                         >
-                          🗑 Remove
+                          <Trash className="h-3.5 w-3.5" /> Remove
                         </button>
                       )}
                     </div>
@@ -184,7 +191,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
       </section>
 
       <aside aria-label="Announcements" className="space-y-3">
-        <h2 className="text-lg font-semibold">📣 Announcements</h2>
+        <h2 className="section-title">Announcements</h2>
         {announcements.data?.items?.length === 0 && (
           <Card className="text-sm text-slate-500">No announcements.</Card>
         )}

@@ -27,6 +27,9 @@ export interface Course {
   created_at: string;
   instructor_name?: string;
   enrollment_count?: number;
+  /** Mean learner rating 0-5 (FR-S3). */
+  avg_rating?: number;
+  rating_count?: number;
 }
 
 export interface Lecture {
@@ -52,12 +55,22 @@ export interface CourseModule {
 export interface CourseDetail extends Course {
   instructor_id: string;
   modules: CourseModule[];
+  /** The caller's own rating, if they have rated the course (FR-S3). */
+  my_rating?: number | null;
+  my_review?: string | null;
   assignments: {
     id: string;
     title: string;
     instructions: string | null;
     due_date: string | null;
   }[];
+}
+
+export interface CourseRating {
+  rating: number;
+  comment: string | null;
+  updated_at: string;
+  learner_name: string;
 }
 
 export interface Enrollment {
@@ -145,6 +158,8 @@ export interface Certificate {
   issued_at: string;
   certificate_url: string | null;
   course_title: string;
+  /** Human-readable credential serial, e.g. VTX-2026-1A2B3C4D. */
+  serial?: string;
 }
 
 export interface Streak {

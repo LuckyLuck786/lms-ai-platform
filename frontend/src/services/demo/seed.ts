@@ -100,6 +100,16 @@ export interface ProgressRecord {
   last_watched_at: string | null;
 }
 
+export interface CourseRatingRecord {
+  id: string;
+  course_id: string;
+  user_id: string;
+  learner_name: string;
+  rating: number;
+  comment: string | null;
+  updated_at: string;
+}
+
 export interface DemoState {
   /** question_id -> correct option ids; never leaves the "server" side. */
   answerKey: Record<string, string[]>;
@@ -122,6 +132,7 @@ export interface DemoState {
   streaks: Record<string, Streak>;
   badges: Badge[];
   certificates: CertificateRecord[];
+  ratings: CourseRatingRecord[];
   sessions: ChatSessionRecord[];
   messages: ChatMessageRecord[];
 }
@@ -336,7 +347,7 @@ export function createDemoState(): DemoState {
       instructor_id: 'u-instructor',
       title: 'Linear Algebra Essentials',
       description:
-        'Vectors, matrices, subspaces and the singular value decomposition — taught the way machine-learning courses actually use it.',
+        'Vectors, matrices, subspaces and the singular value decomposition, taught the way machine-learning courses actually use it.',
       category: 'Mathematics',
       difficulty: 'beginner',
       thumbnail_url: null,
@@ -445,7 +456,7 @@ export function createDemoState(): DemoState {
               title: 'Tokens, themes and dark mode',
               video_url: CLIPS.jellyfish,
               transcript:
-                'A design token is a named design decision stored separately from the component that consumes it. Naming by role rather than by literal value — surface, on-surface, border-subtle — means a theme swap changes every binding at once. Semantic names survive redesigns; hex codes do not.',
+                'A design token is a named design decision stored separately from the component that consumes it. Naming by role rather than by literal value (surface, on-surface, border-subtle) means a theme swap changes every binding at once. Semantic names survive redesigns; hex codes do not.',
               duration_seconds: 612,
               order_index: 0,
               resource_urls: null,
@@ -587,7 +598,7 @@ export function createDemoState(): DemoState {
       instructor_id: 'u-instructor2',
       title: 'Introduction to Kubernetes',
       description:
-        'Pods, deployments, services and ingress — the mental model that makes cluster YAML stop looking like ritual.',
+        'Pods, deployments, services and ingress: the mental model that makes cluster YAML stop looking like ritual.',
       category: 'Computer Science',
       difficulty: 'advanced',
       thumbnail_url: null,
@@ -868,7 +879,7 @@ export function createDemoState(): DemoState {
       user_id: 'u-student2',
       submitted_at: iso(10),
       grade: '88',
-      feedback: 'Clean work — remember to derive the value from state on every render.',
+      feedback: 'Clean work: remember to derive the value from state on every render.',
       file_name: 'refactor-routes.tsx',
     },
     {
@@ -904,7 +915,7 @@ export function createDemoState(): DemoState {
       id: 'n-1',
       lecture_id: 'l-ml-3',
       timestamp_seconds: 95,
-      content: 'Dropout is applied per training step, not per batch — worth revisiting.',
+      content: 'Dropout is applied per training step, not per batch: worth revisiting.',
       created_at: iso(1, 2),
     },
     {
@@ -918,7 +929,7 @@ export function createDemoState(): DemoState {
       id: 'n-3',
       lecture_id: 'l-sql-1',
       timestamp_seconds: 48,
-      content: 'Run EXPLAIN ANALYZE before adding any index — it may already be fine.',
+      content: 'Run EXPLAIN ANALYZE before adding any index: it may already be fine.',
       created_at: iso(3),
     },
     {
@@ -1029,7 +1040,7 @@ export function createDemoState(): DemoState {
     {
       id: 'an-1',
       course_id: 'c-rag',
-      content: 'Live Q&A session this Friday 7 PM — bring your API design questions!',
+      content: 'Live Q&A session this Friday 7 PM: bring your API design questions!',
       created_at: iso(7),
       posted_by_name: 'Dr. Ananya Rao',
     },
@@ -1126,6 +1137,20 @@ export function createDemoState(): DemoState {
     },
   ];
 
+  // Learner ratings (FR-S3) — spread so the catalog's rating filter has signal.
+  const ratings: CourseRatingRecord[] = [
+    { id: 'r-1', course_id: 'c-rag', user_id: 'u-student2', learner_name: 'Riya Sharma', rating: 5, comment: 'The retrieval chapters finally made citations click for me.', updated_at: iso(6) },
+    { id: 'r-2', course_id: 'c-rag', user_id: 'u-student', learner_name: 'Ananya Student', rating: 4, comment: 'Great depth; the tool-use section could use one more example.', updated_at: iso(3) },
+    { id: 'r-3', course_id: 'c-rag', user_id: 'u-admin', learner_name: 'Meera Admin', rating: 4, comment: null, updated_at: iso(11) },
+    { id: 'r-4', course_id: 'c-ml', user_id: 'u-student', learner_name: 'Ananya Student', rating: 5, comment: 'Best statistics refresher I have taken online.', updated_at: iso(15) },
+    { id: 'r-5', course_id: 'c-ml', user_id: 'u-student2', learner_name: 'Riya Sharma', rating: 4, comment: null, updated_at: iso(18) },
+    { id: 'r-6', course_id: 'c-sql', user_id: 'u-student', learner_name: 'Ananya Student', rating: 4, comment: 'Indexing demos are worth the price alone.', updated_at: iso(9) },
+    { id: 'r-7', course_id: 'c-alg', user_id: 'u-student2', learner_name: 'Riya Sharma', rating: 5, comment: 'Proof walkthroughs are unusually clear.', updated_at: iso(22) },
+    { id: 'r-8', course_id: 'c-design', user_id: 'u-admin', learner_name: 'Meera Admin', rating: 3, comment: 'Solid basics; wanted more on accessibility.', updated_at: iso(27) },
+    { id: 'r-9', course_id: 'c-dl', user_id: 'u-student', learner_name: 'Ananya Student', rating: 5, comment: null, updated_at: iso(30) },
+    { id: 'r-10', course_id: 'c-k8s', user_id: 'u-student2', learner_name: 'Riya Sharma', rating: 4, comment: 'Good cluster labs, fast pace.', updated_at: iso(33) },
+  ];
+
   const today = iso(0).slice(0, 10);
   const streaks: Record<string, Streak> = {
     'u-student': { current_streak: 7, longest_streak: 21, last_active_date: today },
@@ -1157,6 +1182,7 @@ export function createDemoState(): DemoState {
     streaks,
     badges,
     certificates,
+    ratings,
     sessions: [
       { id: 'cs-1', course_id: 'c-rag', user_id: 'u-student', mode: 'intermediate', created_at: iso(5) },
     ],
@@ -1174,7 +1200,7 @@ export function createDemoState(): DemoState {
         session_id: 'cs-1',
         sender: 'ai',
         content:
-          'Context is the right default for low-frequency shared state — theme, current user, locale. Reach for a global store once the data changes often enough that every consumer re-render starts to matter.',
+          'Context is the right default for low-frequency shared state: theme, current user, locale. Reach for a global store once the data changes often enough that every consumer re-render starts to matter.',
         sources: [
           {
             lecture_id: 'l-rag-2',

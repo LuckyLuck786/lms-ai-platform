@@ -178,13 +178,13 @@ function Users() {
                   </td>
                   <td className="px-4 py-3">{u.enrollment_count}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        u.is_active
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
-                      }`}
-                    >
+                    <span className="chip capitalize">
+                      <span
+                        aria-hidden="true"
+                        className={`h-1.5 w-1.5 rounded-sm ${
+                          u.is_active ? 'bg-emerald-800' : 'bg-red-700'
+                        }`}
+                      />
                       {u.is_active ? t('admin.active') : t('admin.suspended')}
                     </span>
                   </td>
@@ -249,7 +249,7 @@ function Approvals() {
               <h3 className="font-semibold">{c.title}</h3>
               <p className="text-sm text-slate-500">
                 {t('course.by', { name: c.instructor_name ?? '' })} ·{' '}
-                {c.category ?? t('admin.uncategorized')} · {c.difficulty ?? '—'} ·{' '}
+                {c.category ?? t('admin.uncategorized')} · {c.difficulty ?? t('course.allLevels')} ·{' '}
                 {t('admin.moduleCount', { count: c.module_count })}
               </p>
               <p className="mt-1 line-clamp-2 text-sm text-slate-500">{c.description}</p>

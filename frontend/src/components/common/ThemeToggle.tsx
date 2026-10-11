@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../../utils/i18n';
+import { Moon, Sun } from './Icon';
 
 /** WCAG-friendly dark mode toggle persisted in localStorage. */
 export default function ThemeToggle() {
@@ -23,10 +24,11 @@ export default function ThemeToggle() {
       onClick={() => setDark((d) => !d)}
       aria-pressed={dark}
       aria-label={t('theme.toggle')}
-      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100
-        dark:border-slate-700 dark:hover:bg-slate-800"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm transition
+        hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/[0.06]"
     >
-      {dark ? `☀️ ${t('theme.light')}` : `🌙 ${t('theme.dark')}`}
+      {dark ? <Sun /> : <Moon />}
+      {dark ? t('theme.light') : t('theme.dark')}
     </button>
   );
 }

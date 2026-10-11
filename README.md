@@ -1,4 +1,4 @@
-# LMS-AI Platform — Vertexon Learning Technologies
+# LMS-AI Platform, Vertexon Learning Technologies
 
 AI-augmented Learning Management System: conventional course authoring,
 assessments, gamification, and an embedded RAG-based AI tutor grounded in each
@@ -8,11 +8,11 @@ course's own material. Built per the PRD (`49555bfb75891548eb4433e25b2bdb8c.docx
 
 ```
 frontend/    React 18 + TypeScript + Vite + Tailwind + Redux Toolkit + TanStack Query
-backend/     Node.js + Express + TypeScript — core LMS REST API (/api/v1)
-ai-service/  Python + FastAPI — RAG pipeline, embeddings, Claude integration
+backend/     Node.js + Express + TypeScript, core LMS REST API (/api/v1)
+ai-service/  Python + FastAPI, RAG pipeline, embeddings, Claude integration
 infra/       docker-compose.yml (Postgres 15 + pgvector, Redis, MinIO), nginx, k8s
 .github/     CI pipeline (lint, typecheck, tests)
-docs/        PRD + API spec
+docs/        PRD, API spec, compliance audit + fix/verification reports
 ```
 
 ## Quick start (Phase 1)
@@ -78,17 +78,20 @@ docker compose --env-file .env -f infra/docker-compose.yml --profile app up --bu
 - [x] Streaks (activity touch + daily BullMQ cron at 03:00 UTC) and milestone
       badges with notifications (FR-S9, `tests/streak.test.ts`)
 - [x] Certificate PDF auto-generation at 100% completion via BullMQ worker
-      (pdf-lib), authenticated download endpoint (FR-S8)
+      (pdf-lib), authenticated download endpoint rendered on demand from the DB,
+      engraved A4-landscape design with credential serial + QR, and a public
+      verification page (`GET /certificates/verify/:id`, frontend `/verify/:id`)
+      (FR-S8)
 - [x] Frontend: course player, quiz-taking UI, inline assignment submission,
       real streak/badges/certificates on dashboard, instructor content tools
       (modules, lectures, quiz builder, assignments)
 - [x] Instructor analytics: per-course overview KPIs (enrolments, completion,
       avg. progress/quiz score, watch hours), per-lecture drop-off table and
-      per-quiz averages — `GET /courses/:id/analytics`, owner-or-admin
+      per-quiz averages, `GET /courses/:id/analytics`, owner-or-admin
       (FR-I5, `tests/analytics.test.ts`, dashboard section on `/instructor`)
 - [x] `scripts/smoke.sh` + `scripts/smoke-phase2.sh` end-to-end verification
 
-Roadmap: all four phases implemented — see the status sections above.
+Roadmap: all four phases implemented, see the status sections above.
 
 ## Phase 4 status (Week 4 milestone)
 
@@ -104,7 +107,7 @@ Roadmap: all four phases implemented — see the status sections above.
 - [x] i18n scaffolding (EN/ES/HI nav strings, `useI18n`, localStorage-persisted)
       and accessibility pass: skip-to-content link, ARIA labels, focus styles,
       role=progressbar/alert/status landmarks, dark mode
-- [x] Demo seeder: `npm run seed` (idempotent) — admin/instructor/2 students,
+- [x] Demo seeder: `npm run seed` (idempotent), admin/instructor/2 students,
       approved course with transcripted lectures, quiz, thread, announcement
       (password: `DemoPass123!`)
 - [x] CI hardened: real `pytest` run for the AI service (no `|| true`)
@@ -124,7 +127,7 @@ cd frontend && npm install && npm run dev                           # 3rd termin
 Or everything in Docker: `docker compose --env-file .env -f infra/docker-compose.yml --profile app up --build`.
 
 Demo accounts (after `npm run seed`): `admin@vertexon.demo`,
-`instructor@vertexon.demo`, `student@vertexon.demo` — all `DemoPass123!`.
+`instructor@vertexon.demo`, `student@vertexon.demo`, all `DemoPass123!`.
 
 ## Phase 3 status (Week 3 milestone)
 
@@ -163,7 +166,7 @@ The AI service picks a provider automatically, in this order:
 | 3 | Anthropic (`ANTHROPIC_API_KEY`) | `claude-sonnet-4-5` | paid |
 
 Set any key in `.env` and chat/summaries/quiz-gen/flashcards switch from the
-offline demo mode to real LLM output — no code changes needed. Every provider
+offline demo mode to real LLM output, no code changes needed. Every provider
 call is wrapped so an outage degrades to the extractive fallback instead of
 failing the request. See [llm.py](ai-service/app/core/llm.py) and
 [embeddings.py](ai-service/app/rag/embeddings.py).
@@ -183,22 +186,37 @@ repeatable BullMQ job (03:00 UTC); certificate PDFs generate async on demand;
 topic-mastery recomputes are deduplicated per user+course on the `mastery`
 queue.
 
+## Design system
+
+The interface is deliberately restrained rather than decorative: IBM Plex Sans
+for the interface, Source Serif 4 for display type, IBM Plex Mono for data; a
+warm paper palette (`paper.DEFAULT/CARD/SUNK`) so no surface is pure white; one
+institutional blue accent with muted gold; hairline borders instead of drop
+shadows; 2-6 px corner radii; and no gradients, glass effects, emoji, animation
+on hover or decorative icons. Shared primitives live in
+`frontend/src/styles/index.css` (`.card`, `.chip`, `.eyebrow`, `.section-title`,
+`.skeleton`) and `frontend/src/components/common/`. Long-form legal pages are
+published at `/terms` and `/privacy`.
+
 ## Demo mode (no backend required)
 
 The frontend ships with an in-browser implementation of the `/api/v1` surface
-(`frontend/src/services/demo/`). When no API base URL is configured — a static
-host such as Vercel, or a laptop without Docker running — axios is pointed at
+(`frontend/src/services/demo/`). When no API base URL is configured (a static
+host such as Vercel, or a laptop without Docker running), axios is pointed at
 that adapter instead of the network, so every screen renders real-looking data
 instead of an error:
 
 - the login screen offers one-click sign-in as **student**, **instructor** or
   **admin** (password `DemoPass123!`);
 - catalog, course detail, forum, player, quizzes, assignments, notifications,
-  badges, certificates and the admin panel all work, including mutations
-  (enrol, post, flag, moderate, create courses, auto-grading);
+  badges, certificates, ratings and the admin panel all work, including
+  mutations (enrol, post, flag, moderate, create courses, auto-grading, rate a
+  course);
 - the AI tutor answers with transcript citations, computed by lexical overlap
   rather than a model call, and says so in the reply;
-- certificate downloads return a real (plain) PDF.
+- certificate downloads return a real PDF in a simplified layout; the
+  production generator (`backend/src/utils/certificate.ts`) renders the
+  engraved design, and its QR resolves to the `/verify/:id` registry page.
 
 Override it in either direction:
 
@@ -236,7 +254,7 @@ bash scripts/smoke-phase4.sh   # Phase 4: admin, forum, moderation, notification
 
 The full stack deploys as two free Render web services (`render.yaml` blueprint)
 plus Neon (Postgres + pgvector) and Upstash (Redis), with the frontend on
-Vercel — step-by-step instructions, env vars and post-deploy RAG ingestion are
+Vercel, step-by-step instructions, env vars and post-deploy RAG ingestion are
 in [docs/deploy.md](docs/deploy.md).
 
 ## Known deferrals
@@ -248,14 +266,23 @@ Scoped out of the 4-week build and documented deliberately:
   STT worker would have no input. The ingestion queue (`triggerIngestion`,
   `POST /api/v1/ai/internal/ingest`) is where a speech-to-text step plugs in
   when real uploads arrive.
-- **Object storage (S3/MinIO).** Uploads persist on local disk behind
-  `backend/src/utils/storage.ts` (`persistFile`), served from `/uploads` — the
-  single seam where an S3 driver drops in for cloud hosting.
+- **Object storage.** Uploads go through `backend/src/utils/storage.ts`, which
+  has two drivers: Google Cloud Storage when `GCS_BUCKET` is set (production),
+  and local disk under `./uploads` otherwise. With GCS the API streams objects
+  back through `/uploads/*`, so media survives redeploys and is shared by every
+  instance. The S3/MinIO path (docker-compose profile `storage`) is the
+  remaining unimplemented driver.
 - **SMTP provider credentials.** Email is code-complete (nodemailer, pooling,
   template rendering); locally `SMTP_URL=smtp://localhost:1025` delivers to the
   Mailpit web inbox, otherwise messages are logged as structured dry-runs.
   Production just needs a real `smtp://` URL (Resend/Brevo/SES/Gmail app
-  password) — no code changes.
+  password), no code changes.
+- **Service-to-service auth.** The AI service trusts its caller today; a shared
+  secret header (Secret Manager) plus Cloud Run IAM for the backend is the
+  intended hardening step, so the internal ingest route cannot be called by
+  third parties.
+- **Email delivery** needs provider credentials in production (`SMTP_URL`); the
+  code path, templates and worker dispatch are complete.
 - **i18n depth** stays scaffolding (nav + core UI strings in EN/ES/HI), per
   PRD §3.2; **load testing** and **monitoring** (k6, Prometheus/Grafana) are
   ops tasks for the deploy environment, not the codebase.

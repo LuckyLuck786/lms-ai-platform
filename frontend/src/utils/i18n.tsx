@@ -28,7 +28,7 @@ export const LOCALES: { code: Locale; label: string }[] = [
 const en: Record<string, string> = {
   // --- shell ---
   'app.skipToContent': 'Skip to main content',
-  'app.footer': 'Vertexon Learning Technologies — LMS-AI',
+  'app.footer': 'Vertexon Learning Technologies · LMS-AI',
   'app.language': 'Language',
 
   // --- navigation ---
@@ -62,6 +62,8 @@ const en: Record<string, string> = {
   'auth.demoAccounts': 'Demo accounts',
   'auth.demoPassword': 'Password for all three:',
   'auth.required': 'Required',
+  'auth.signInEyebrow': 'Account access',
+  'auth.browsePublic': 'No account needed to browse:',
 
   // --- common ---
   'common.loading': 'Loading…',
@@ -125,7 +127,7 @@ const en: Record<string, string> = {
   'course.notFound': 'Course not found.',
   'course.enrollNow': 'Enroll now',
   'course.loginToEnroll': 'Log in to enroll',
-  'course.startLearning': '▶ Start learning',
+  'course.startLearning': 'Start learning',
   'course.allLevels': 'all levels',
   'course.by': 'by {name}',
   'course.quizzes': 'Quizzes',
@@ -136,11 +138,11 @@ const en: Record<string, string> = {
   'course.noModules': 'No modules published yet.',
   'course.noLectures': 'No lectures yet',
   'course.minutes': '{count} min',
-  'course.ownerHint': 'You own this course — manage its content from the instructor workspace.',
+  'course.ownerHint': 'You own this course, manage its content from the instructor workspace.',
   'course.instructorWorkspace': 'instructor workspace',
 
   // --- dashboard ---
-  'dashboard.welcome': 'Welcome back, {name} 👋',
+  'dashboard.welcome': 'Welcome back, {name}',
   'dashboard.subtitle': 'Pick up where you left off.',
   'dashboard.myCourses': 'My courses',
   'dashboard.progress': 'Course progress',
@@ -161,6 +163,7 @@ const en: Record<string, string> = {
   'dashboard.badgesEarned': 'Badges earned',
   'dashboard.certificates': 'Certificates',
   'dashboard.issuedOn': 'Issued {date}',
+  'dashboard.verifyCredential': 'Verify credential',
   'dashboard.downloadPdf': 'Download PDF',
   'dashboard.percentComplete': '{value}% complete',
 
@@ -180,10 +183,10 @@ const en: Record<string, string> = {
   'tools.lectureAdded': 'Lecture added',
   'tools.attachMaterial': 'Attach material to an existing lecture',
   'tools.attachHint': 'Recorded already? Add slides or PDFs to a lecture you posted earlier.',
-  'tools.pickLecture': '— lecture —',
+  'tools.pickLecture': 'Select lecture',
   'tools.uploadMaterial': 'Upload material',
   'tools.uploadedCount': 'Uploaded {count} file(s)',
-  'tools.noLecturesYet': 'Add a lecture first — there is nothing to attach material to yet.',
+  'tools.noLecturesYet': 'Add a lecture first, there is nothing to attach material to yet.',
   'tools.videoTooLarge': '{name} is larger than 512 MB',
   'tools.quiz': 'Build a quiz (auto-graded)',
   'tools.quizTitle': 'Quiz title',
@@ -206,8 +209,8 @@ const en: Record<string, string> = {
   'tools.announcementPlaceholder': 'Message to all enrolled students (in-app + email)…',
   'tools.post': 'Post',
   'tools.posting': 'Posting…',
-  'tools.announcementPosted': 'Announcement posted — {count} student(s) notified',
-  'tools.selectModule': '— module —',
+  'tools.announcementPosted': 'Announcement posted: {count} student(s) notified',
+  'tools.selectModule': 'Select module',
 
   // --- instructor workspace ---
   'instructor.title': 'Instructor workspace',
@@ -246,8 +249,8 @@ const en: Record<string, string> = {
   'player.markComplete': 'Mark as complete',
   'player.nextLecture': 'Next lecture →',
   'player.resumeAt': 'Resume at {time}',
-  'player.completed': 'Completed ✓',
-  'player.noVideo': 'No video uploaded yet — read the transcript below.',
+  'player.completed': 'Completed',
+  'player.noVideo': 'No video uploaded yet, read the transcript below.',
   'player.material': 'Lecture material',
   'player.notes': 'Timestamped notes',
   'player.notePlaceholder': 'Note at current time…',
@@ -265,7 +268,7 @@ const en: Record<string, string> = {
   'player.flashcards': 'Make flashcards',
   'player.generateQuiz': 'Generate quiz',
   'player.studyPlan': 'Study plan',
-  'player.askAnything': 'Ask anything about this course — answers are grounded in the material.',
+  'player.askAnything': 'Ask anything about this course, answers are grounded in the material.',
   'player.askPlaceholder': 'Type your question…',
   'player.send': 'Send',
   'player.sending': 'Thinking…',
@@ -288,7 +291,7 @@ const en: Record<string, string> = {
   'ai.depthAdjusted': 'Adjusted to {depth}',
   'ai.topicMastery': 'Topic mastery',
   'ai.masteryHint': 'Adaptive chat and quiz drafts use these scores.',
-  'ai.masteryEmpty': 'No mastery data yet — watch a lecture or take a quiz.',
+  'ai.masteryEmpty': 'No mastery data yet, watch a lecture or take a quiz.',
   'ai.quizDifficulty': 'Difficulty: {level}',
 
   // --- quiz ---
@@ -313,7 +316,7 @@ const en: Record<string, string> = {
   'quiz.typeSingle': 'single',
   'quiz.typeMulti': 'multi',
   'quiz.typeWritten': 'written',
-  'quiz.keepPractising': 'Keep practicing — retake when ready.',
+  'quiz.keepPractising': 'Keep practicing, retake when ready.',
   'quiz.answerFor': 'Answer for question {number}',
 
   // --- admin ---
@@ -353,19 +356,63 @@ const en: Record<string, string> = {
   'admin.active': 'active',
   'admin.suspended': 'suspended',
   'admin.roleFor': 'Role for {name}',
-  'admin.approvalsEmpty': 'Approval queue is empty 🎉',
+  'admin.approvalsEmpty': 'Approval queue is empty.',
   'admin.uncategorized': 'uncategorized',
   'admin.moduleCount': '{count} module(s)',
   'admin.reviewerComment': 'Reviewer comment (optional)',
   'admin.reviewerCommentFor': 'Reviewer comment for {title}',
   'admin.remove': 'Remove',
-  'admin.flaggedEmpty': 'No flagged posts — the forum is clean.',
+  'admin.flaggedEmpty': 'No flagged posts, the forum is clean.',
 
   // --- notifications ---
   'notifications.title': 'Notifications',
   'notifications.empty': 'No notifications yet.',
   'notifications.markAllRead': 'Mark all read',
   'notifications.markRead': 'Mark read',
+
+  // --- public credential verification ---
+  'verify.registry': 'Vertexon Learning Technologies · Certification registry',
+  'verify.valid': 'Verified credential',
+  'verify.completed': 'has successfully completed',
+  'verify.issued': 'Issued',
+  'verify.credentialId': 'Credential ID',
+  'verify.instructor': 'Instructor',
+  'verify.confirm':
+    'This page confirms the credential exists in the Vertexon registry and was issued to the named learner.',
+  'verify.notFoundTitle': 'No credential found',
+  'verify.notFoundBody':
+    'No certificate matches this link. Check the URL or scan the QR code on the certificate again.',
+  'verify.checking': 'Checking the registry…',
+  'verify.backHome': 'Back to Vertexon',
+
+  // --- ratings, cover art, rubrics ---
+  'catalog.rating': 'Rating',
+  'catalog.ratingAny': 'Any rating',
+  'catalog.ratingAtLeast': '{rating}+ stars',
+  'catalog.unrated': 'Not rated yet',
+  'course.ratings': 'Rating',
+  'course.ratingCount': '{count} learner rating(s)',
+  'course.yourRating': 'Your rating',
+  'course.rateThisCourse': 'Rate this course',
+  'course.reviewPlaceholder': 'Share what worked (optional)…',
+  'course.saveReview': 'Save review',
+  'course.reviewSaved': 'Thanks, your review is saved.',
+  'course.rateAfterEnrol': 'Enrol to rate this course.',
+  'course.loginToRate': 'Log in and enrol to rate this course.',
+  'course.reviews': 'Reviews',
+  'course.noReviews': 'No written reviews yet.',
+  'instructor.thumbnail': 'Cover image URL (optional)',
+  'tools.rubric': 'Grading rubric (optional)',
+  'tools.rubricHint': 'Add criteria and weights, students see the rubric on the assignment.',
+  'tools.criterion': 'Criterion, e.g. Correctness',
+  'tools.weight': 'Weight %',
+  'tools.addCriterion': '+ Criterion',
+
+  // --- legal ---
+  'legal.title': 'Legal',
+  'legal.terms': 'Terms of use',
+  'legal.privacy': 'Privacy policy',
+  'legal.updated': 'Last updated 11 October 2026',
 
   // --- assessments / submissions ---
   'assignments.title': 'Assignments',
@@ -382,7 +429,7 @@ const en: Record<string, string> = {
 
 const es: Record<string, string> = {
   'app.skipToContent': 'Saltar al contenido principal',
-  'app.footer': 'Vertexon Learning Technologies — LMS-AI',
+  'app.footer': 'Vertexon Learning Technologies · LMS-AI',
   'app.language': 'Idioma',
 
   'nav.dashboard': 'Panel',
@@ -413,6 +460,8 @@ const es: Record<string, string> = {
   'auth.demoAccounts': 'Cuentas de demostración',
   'auth.demoPassword': 'Contraseña para las tres:',
   'auth.required': 'Obligatorio',
+  'auth.signInEyebrow': 'Acceso a la cuenta',
+  'auth.browsePublic': 'No necesitas cuenta para explorar:',
 
   'common.loading': 'Cargando…',
   'common.search': 'Buscar',
@@ -473,7 +522,7 @@ const es: Record<string, string> = {
   'course.notFound': 'Curso no encontrado.',
   'course.enrollNow': 'Inscribirse ahora',
   'course.loginToEnroll': 'Inicia sesión para inscribirte',
-  'course.startLearning': '▶ Empezar a aprender',
+  'course.startLearning': 'Empezar a aprender',
   'course.allLevels': 'todos los niveles',
   'course.by': 'por {name}',
   'course.quizzes': 'Cuestionarios',
@@ -485,10 +534,10 @@ const es: Record<string, string> = {
   'course.noLectures': 'Aún no hay clases',
   'course.minutes': '{count} min',
   'course.ownerHint':
-    'Eres el propietario de este curso — gestiona su contenido desde el espacio del instructor.',
+    'Eres el propietario de este curso, gestiona su contenido desde el espacio del instructor.',
   'course.instructorWorkspace': 'espacio del instructor',
 
-  'dashboard.welcome': 'Bienvenido de nuevo, {name} 👋',
+  'dashboard.welcome': 'Bienvenido de nuevo, {name}',
   'dashboard.subtitle': 'Continúa donde lo dejaste.',
   'dashboard.myCourses': 'Mis cursos',
   'dashboard.progress': 'Progreso del curso',
@@ -510,6 +559,7 @@ const es: Record<string, string> = {
   'dashboard.badgesEarned': 'Insignias obtenidas',
   'dashboard.certificates': 'Certificados',
   'dashboard.issuedOn': 'Emitido {date}',
+  'dashboard.verifyCredential': 'Verificar credencial',
   'dashboard.downloadPdf': 'Descargar PDF',
   'dashboard.percentComplete': '{value}% completado',
 
@@ -529,11 +579,11 @@ const es: Record<string, string> = {
   'tools.attachMaterial': 'Adjuntar material a una clase existente',
   'tools.attachHint':
     '¿Ya la grabaste? Añade diapositivas o PDF a una clase que publicaste antes.',
-  'tools.pickLecture': '— clase —',
+  'tools.pickLecture': 'Selecciona clase',
   'tools.uploadMaterial': 'Subir material',
   'tools.uploadedCount': 'Se subieron {count} archivo(s)',
   'tools.noLecturesYet':
-    'Añade primero una clase — todavía no hay nada a lo que adjuntar material.',
+    'Añade primero una clase, todavía no hay nada a lo que adjuntar material.',
   'tools.videoTooLarge': '{name} supera los 512 MB',
   'tools.quiz': 'Crear un cuestionario (autoevaluado)',
   'tools.quizTitle': 'Título del cuestionario',
@@ -557,8 +607,8 @@ const es: Record<string, string> = {
     'Mensaje a todos los estudiantes inscritos (en la app + correo)…',
   'tools.post': 'Publicar',
   'tools.posting': 'Publicando…',
-  'tools.announcementPosted': 'Anuncio publicado — {count} estudiante(s) notificado(s)',
-  'tools.selectModule': '— módulo —',
+  'tools.announcementPosted': 'Anuncio publicado: {count} estudiante(s) notificado(s)',
+  'tools.selectModule': 'Selecciona módulo',
 
   'instructor.title': 'Espacio del instructor',
   'instructor.createCourse': 'Crear un curso',
@@ -595,8 +645,8 @@ const es: Record<string, string> = {
   'player.markComplete': 'Marcar como completado',
   'player.nextLecture': 'Siguiente clase →',
   'player.resumeAt': 'Continuar en {time}',
-  'player.completed': 'Completado ✓',
-  'player.noVideo': 'Aún no hay vídeo — lee la transcripción abajo.',
+  'player.completed': 'Completado',
+  'player.noVideo': 'Aún no hay vídeo, lee la transcripción abajo.',
   'player.material': 'Material de la clase',
   'player.notes': 'Notas con marca de tiempo',
   'player.notePlaceholder': 'Nota en el momento actual…',
@@ -615,7 +665,7 @@ const es: Record<string, string> = {
   'player.generateQuiz': 'Generar cuestionario',
   'player.studyPlan': 'Plan de estudio',
   'player.askAnything':
-    'Pregunta lo que quieras sobre este curso — las respuestas se basan en el material.',
+    'Pregunta lo que quieras sobre este curso, las respuestas se basan en el material.',
   'player.askPlaceholder': 'Escribe tu pregunta…',
   'player.send': 'Enviar',
   'player.sending': 'Pensando…',
@@ -638,7 +688,7 @@ const es: Record<string, string> = {
   'ai.depthAdjusted': 'Ajustado a {depth}',
   'ai.topicMastery': 'Dominio por tema',
   'ai.masteryHint': 'El chat adaptativo y los borradores usan estas puntuaciones.',
-  'ai.masteryEmpty': 'Aún no hay datos — mira una clase o responde un cuestionario.',
+  'ai.masteryEmpty': 'Aún no hay datos, mira una clase o responde un cuestionario.',
   'ai.quizDifficulty': 'Dificultad: {level}',
 
   'quiz.title': 'Cuestionario',
@@ -662,7 +712,7 @@ const es: Record<string, string> = {
   'quiz.typeSingle': 'única',
   'quiz.typeMulti': 'múltiple',
   'quiz.typeWritten': 'escrita',
-  'quiz.keepPractising': 'Sigue practicando — repite cuando quieras.',
+  'quiz.keepPractising': 'Sigue practicando, repite cuando quieras.',
   'quiz.answerFor': 'Respuesta para la pregunta {number}',
 
   'admin.title': 'Administración',
@@ -701,18 +751,59 @@ const es: Record<string, string> = {
   'admin.active': 'activo',
   'admin.suspended': 'suspendido',
   'admin.roleFor': 'Rol de {name}',
-  'admin.approvalsEmpty': 'La cola de aprobación está vacía 🎉',
+  'admin.approvalsEmpty': 'La cola de aprobación está vacía.',
   'admin.uncategorized': 'sin categoría',
   'admin.moduleCount': '{count} módulo(s)',
   'admin.reviewerComment': 'Comentario del revisor (opcional)',
   'admin.reviewerCommentFor': 'Comentario del revisor para {title}',
   'admin.remove': 'Eliminar',
-  'admin.flaggedEmpty': 'No hay publicaciones reportadas — el foro está limpio.',
+  'admin.flaggedEmpty': 'No hay publicaciones reportadas, el foro está limpio.',
 
   'notifications.title': 'Notificaciones',
   'notifications.empty': 'Todavía no hay notificaciones.',
   'notifications.markAllRead': 'Marcar todo como leído',
   'notifications.markRead': 'Marcar como leído',
+
+  'verify.registry': 'Vertexon Learning Technologies · Registro de certificación',
+  'verify.valid': 'Credencial verificada',
+  'verify.completed': 'ha completado con éxito',
+  'verify.issued': 'Emitido',
+  'verify.credentialId': 'ID de credencial',
+  'verify.instructor': 'Instructor',
+  'verify.confirm':
+    'Esta página confirma que la credencial existe en el registro de Vertexon y fue emitida al estudiante indicado.',
+  'verify.notFoundTitle': 'No se encontró la credencial',
+  'verify.notFoundBody':
+    'Ningún certificado coincide con este enlace. Revisa la URL o vuelve a escanear el código QR.',
+  'verify.checking': 'Consultando el registro…',
+  'verify.backHome': 'Volver a Vertexon',
+
+  'catalog.rating': 'Valoración',
+  'catalog.ratingAny': 'Cualquier valoración',
+  'catalog.ratingAtLeast': '{rating}+ estrellas',
+  'catalog.unrated': 'Sin valoraciones',
+  'course.ratings': 'Valoración',
+  'course.ratingCount': '{count} valoración(es)',
+  'course.yourRating': 'Tu valoración',
+  'course.rateThisCourse': 'Valora este curso',
+  'course.reviewPlaceholder': 'Cuenta qué te sirvió (opcional)…',
+  'course.saveReview': 'Guardar reseña',
+  'course.reviewSaved': 'Gracias, tu reseña se guardó.',
+  'course.rateAfterEnrol': 'Inscríbete para valorar este curso.',
+  'course.loginToRate': 'Inicia sesión e inscríbete para valorarlo.',
+  'course.reviews': 'Reseñas',
+  'course.noReviews': 'Todavía no hay reseñas escritas.',
+  'instructor.thumbnail': 'URL de la imagen de portada (opcional)',
+  'tools.rubric': 'Rúbrica de evaluación (opcional)',
+  'tools.rubricHint': 'Añade criterios y pesos, el estudiante ve la rúbrica en la tarea.',
+  'tools.criterion': 'Criterio, p. ej. Corrección',
+  'tools.weight': 'Peso %',
+  'tools.addCriterion': '+ Criterio',
+
+  'legal.title': 'Legal',
+  'legal.terms': 'Condiciones de uso',
+  'legal.privacy': 'Política de privacidad',
+  'legal.updated': 'Última actualización: 11 de octubre de 2026',
 
   'assignments.title': 'Tareas',
   'assignments.due': 'Entrega {date}',
@@ -728,7 +819,7 @@ const es: Record<string, string> = {
 
 const hi: Record<string, string> = {
   'app.skipToContent': 'मुख्य सामग्री पर जाएँ',
-  'app.footer': 'Vertexon Learning Technologies — LMS-AI',
+  'app.footer': 'Vertexon Learning Technologies · LMS-AI',
   'app.language': 'भाषा',
 
   'nav.dashboard': 'डैशबोर्ड',
@@ -759,6 +850,8 @@ const hi: Record<string, string> = {
   'auth.demoAccounts': 'डेमो खाते',
   'auth.demoPassword': 'तीनों के लिए पासवर्ड:',
   'auth.required': 'आवश्यक',
+  'auth.signInEyebrow': 'खाता प्रवेश',
+  'auth.browsePublic': 'ब्राउज़ करने के लिए खाता आवश्यक नहीं:',
 
   'common.loading': 'लोड हो रहा है…',
   'common.search': 'खोजें',
@@ -818,7 +911,7 @@ const hi: Record<string, string> = {
   'course.notFound': 'पाठ्यक्रम नहीं मिला।',
   'course.enrollNow': 'अभी नामांकन करें',
   'course.loginToEnroll': 'नामांकन के लिए लॉग इन करें',
-  'course.startLearning': '▶ सीखना शुरू करें',
+  'course.startLearning': 'सीखना शुरू करें',
   'course.allLevels': 'सभी स्तर',
   'course.by': '{name} द्वारा',
   'course.quizzes': 'क्विज़',
@@ -830,10 +923,10 @@ const hi: Record<string, string> = {
   'course.noLectures': 'अभी कोई व्याख्यान नहीं',
   'course.minutes': '{count} मिनट',
   'course.ownerHint':
-    'यह पाठ्यक्रम आपका है — इसकी सामग्री प्रशिक्षक कार्यक्षेत्र से प्रबंधित करें।',
+    'यह पाठ्यक्रम आपका है, इसकी सामग्री प्रशिक्षक कार्यक्षेत्र से प्रबंधित करें।',
   'course.instructorWorkspace': 'प्रशिक्षक कार्यक्षेत्र',
 
-  'dashboard.welcome': 'वापसी पर स्वागत, {name} 👋',
+  'dashboard.welcome': 'वापसी पर स्वागत, {name}',
   'dashboard.subtitle': 'जहाँ छोड़ा था वहीं से जारी रखें।',
   'dashboard.myCourses': 'मेरे पाठ्यक्रम',
   'dashboard.progress': 'पाठ्यक्रम प्रगति',
@@ -855,6 +948,7 @@ const hi: Record<string, string> = {
   'dashboard.badgesEarned': 'अर्जित बैज',
   'dashboard.certificates': 'प्रमाणपत्र',
   'dashboard.issuedOn': 'जारी {date}',
+  'dashboard.verifyCredential': 'क्रेडेंशियल सत्यापित करें',
   'dashboard.downloadPdf': 'PDF डाउनलोड करें',
   'dashboard.percentComplete': '{value}% पूर्ण',
 
@@ -873,10 +967,10 @@ const hi: Record<string, string> = {
   'tools.lectureAdded': 'व्याख्यान जोड़ा गया',
   'tools.attachMaterial': 'मौजूदा व्याख्यान में सामग्री जोड़ें',
   'tools.attachHint': 'पहले ही रिकॉर्ड कर लिया? पहले पोस्ट किए व्याख्यान में स्लाइड या PDF जोड़ें।',
-  'tools.pickLecture': '— व्याख्यान —',
+  'tools.pickLecture': 'व्याख्यान चुनें',
   'tools.uploadMaterial': 'सामग्री अपलोड करें',
   'tools.uploadedCount': '{count} फ़ाइल अपलोड हुई',
-  'tools.noLecturesYet': 'पहले एक व्याख्यान जोड़ें — सामग्री जोड़ने के लिए अभी कुछ नहीं है।',
+  'tools.noLecturesYet': 'पहले एक व्याख्यान जोड़ें, सामग्री जोड़ने के लिए अभी कुछ नहीं है।',
   'tools.videoTooLarge': '{name} 512 MB से बड़ी है',
   'tools.quiz': 'क्विज़ बनाएँ (स्वतः जाँच)',
   'tools.quizTitle': 'क्विज़ शीर्षक',
@@ -899,8 +993,8 @@ const hi: Record<string, string> = {
   'tools.announcementPlaceholder': 'सभी नामांकित छात्रों को संदेश (ऐप + ईमेल)…',
   'tools.post': 'पोस्ट करें',
   'tools.posting': 'पोस्ट हो रहा है…',
-  'tools.announcementPosted': 'घोषणा पोस्ट हुई — {count} छात्र को सूचित किया गया',
-  'tools.selectModule': '— मॉड्यूल —',
+  'tools.announcementPosted': 'घोषणा पोस्ट हुई: {count} छात्र को सूचित किया गया',
+  'tools.selectModule': 'मॉड्यूल चुनें',
 
   'instructor.title': 'प्रशिक्षक कार्यक्षेत्र',
   'instructor.createCourse': 'पाठ्यक्रम बनाएँ',
@@ -937,8 +1031,8 @@ const hi: Record<string, string> = {
   'player.markComplete': 'पूर्ण के रूप में चिह्नित करें',
   'player.nextLecture': 'अगला व्याख्यान →',
   'player.resumeAt': '{time} पर जारी रखें',
-  'player.completed': 'पूर्ण ✓',
-  'player.noVideo': 'अभी कोई वीडियो नहीं — नीचे प्रतिलेख पढ़ें।',
+  'player.completed': 'पूर्ण',
+  'player.noVideo': 'अभी कोई वीडियो नहीं, नीचे प्रतिलेख पढ़ें।',
   'player.material': 'व्याख्यान सामग्री',
   'player.notes': 'समय-चिह्नित नोट्स',
   'player.notePlaceholder': 'वर्तमान समय पर नोट…',
@@ -956,7 +1050,7 @@ const hi: Record<string, string> = {
   'player.flashcards': 'फ़्लैशकार्ड बनाएँ',
   'player.generateQuiz': 'क्विज़ बनाएँ',
   'player.studyPlan': 'अध्ययन योजना',
-  'player.askAnything': 'इस पाठ्यक्रम के बारे में कुछ भी पूछें — उत्तर सामग्री पर आधारित हैं।',
+  'player.askAnything': 'इस पाठ्यक्रम के बारे में कुछ भी पूछें, उत्तर सामग्री पर आधारित हैं।',
   'player.askPlaceholder': 'अपना प्रश्न लिखें…',
   'player.send': 'भेजें',
   'player.sending': 'सोच रहा है…',
@@ -978,7 +1072,7 @@ const hi: Record<string, string> = {
   'ai.depthAdjusted': '{depth} पर समायोजित',
   'ai.topicMastery': 'विषय दक्षता',
   'ai.masteryHint': 'अनुकूली चैट और क्विज़ ड्राफ़्ट इन अंकों का उपयोग करते हैं।',
-  'ai.masteryEmpty': 'अभी कोई दक्षता डेटा नहीं — व्याख्यान देखें या क्विज़ दें।',
+  'ai.masteryEmpty': 'अभी कोई दक्षता डेटा नहीं, व्याख्यान देखें या क्विज़ दें।',
   'ai.quizDifficulty': 'कठिनाई: {level}',
 
   'quiz.title': 'क्विज़',
@@ -1002,7 +1096,7 @@ const hi: Record<string, string> = {
   'quiz.typeSingle': 'एकल',
   'quiz.typeMulti': 'बहु',
   'quiz.typeWritten': 'लिखित',
-  'quiz.keepPractising': 'अभ्यास जारी रखें — तैयार होने पर दोबारा लें।',
+  'quiz.keepPractising': 'अभ्यास जारी रखें, तैयार होने पर दोबारा लें।',
   'quiz.answerFor': 'प्रश्न {number} का उत्तर',
 
   'admin.title': 'व्यवस्थापक',
@@ -1041,18 +1135,59 @@ const hi: Record<string, string> = {
   'admin.active': 'सक्रिय',
   'admin.suspended': 'निलंबित',
   'admin.roleFor': '{name} की भूमिका',
-  'admin.approvalsEmpty': 'स्वीकृति कतार खाली है 🎉',
+  'admin.approvalsEmpty': 'स्वीकृति कतार खाली है।',
   'admin.uncategorized': 'अवर्गीकृत',
   'admin.moduleCount': '{count} मॉड्यूल',
   'admin.reviewerComment': 'समीक्षक टिप्पणी (वैकल्पिक)',
   'admin.reviewerCommentFor': '{title} के लिए समीक्षक टिप्पणी',
   'admin.remove': 'हटाएँ',
-  'admin.flaggedEmpty': 'कोई रिपोर्ट की गई पोस्ट नहीं — फ़ोरम साफ़ है।',
+  'admin.flaggedEmpty': 'कोई रिपोर्ट की गई पोस्ट नहीं, फ़ोरम साफ़ है।',
 
   'notifications.title': 'सूचनाएँ',
   'notifications.empty': 'अभी कोई सूचना नहीं।',
   'notifications.markAllRead': 'सभी पढ़े हुए चिह्नित करें',
   'notifications.markRead': 'पढ़ा हुआ चिह्नित करें',
+
+  'verify.registry': 'Vertexon Learning Technologies · प्रमाणन रजिस्ट्री',
+  'verify.valid': 'सत्यापित क्रेडेंशियल',
+  'verify.completed': 'ने सफलतापूर्वक पूरा किया',
+  'verify.issued': 'जारी',
+  'verify.credentialId': 'क्रेडेंशियल ID',
+  'verify.instructor': 'प्रशिक्षक',
+  'verify.confirm':
+    'यह पृष्ठ पुष्टि करता है कि क्रेडेंशियल Vertexon रजिस्ट्री में मौजूद है और इसे बताए गए शिक्षार्थी को जारी किया गया था।',
+  'verify.notFoundTitle': 'कोई क्रेडेंशियल नहीं मिला',
+  'verify.notFoundBody':
+    'इस लिंक से कोई प्रमाणपत्र मेल नहीं खाता। URL जाँचें या प्रमाणपत्र का QR कोड फिर से स्कैन करें।',
+  'verify.checking': 'रजिस्ट्री जाँची जा रही है…',
+  'verify.backHome': 'Vertexon पर वापस जाएँ',
+
+  'catalog.rating': 'रेटिंग',
+  'catalog.ratingAny': 'कोई भी रेटिंग',
+  'catalog.ratingAtLeast': '{rating}+ सितारे',
+  'catalog.unrated': 'अभी कोई रेटिंग नहीं',
+  'course.ratings': 'रेटिंग',
+  'course.ratingCount': '{count} शिक्षार्थी रेटिंग',
+  'course.yourRating': 'आपकी रेटिंग',
+  'course.rateThisCourse': 'इस पाठ्यक्रम को रेट करें',
+  'course.reviewPlaceholder': 'क्या उपयोगी लगा, साझा करें (वैकल्पिक)…',
+  'course.saveReview': 'समीक्षा सहेजें',
+  'course.reviewSaved': 'धन्यवाद, आपकी समीक्षा सहेजी गई।',
+  'course.rateAfterEnrol': 'रेट करने के लिए नामांकन करें।',
+  'course.loginToRate': 'रेट करने के लिए लॉग इन करें और नामांकन करें।',
+  'course.reviews': 'समीक्षाएँ',
+  'course.noReviews': 'अभी कोई लिखित समीक्षा नहीं।',
+  'instructor.thumbnail': 'कवर इमेज URL (वैकल्पिक)',
+  'tools.rubric': 'मूल्यांकन रूब्रिक (वैकल्पिक)',
+  'tools.rubricHint': 'मानदंड और भार जोड़ें, छात्र असाइनमेंट पर रूब्रिक देखते हैं।',
+  'tools.criterion': 'मानदंड, जैसे शुद्धता',
+  'tools.weight': 'भार %',
+  'tools.addCriterion': '+ मानदंड',
+
+  'legal.title': 'कानूनी',
+  'legal.terms': 'उपयोग की शर्तें',
+  'legal.privacy': 'गोपनीयता नीति',
+  'legal.updated': 'अंतिम अद्यतन: 11 अक्टूबर 2026',
 
   'assignments.title': 'असाइनमेंट',
   'assignments.due': 'अंतिम तिथि {date}',
@@ -1089,7 +1224,7 @@ interface I18nValue {
   t: Translate;
 }
 
-/** Look up a key directly (no React) — used by tests and non-component code. */
+/** Look up a key directly (no React), used by tests and non-component code. */
 export function translate(
   locale: Locale,
   key: string,

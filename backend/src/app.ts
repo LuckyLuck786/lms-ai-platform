@@ -23,6 +23,7 @@ import { discussionsRouter } from './modules/discussions/discussions.router';
 import { announcementsRouter } from './modules/announcements/announcements.router';
 import { notificationsRouter } from './modules/notifications/notifications.router';
 import { adminRouter } from './modules/admin/admin.router';
+import { storageDriver, streamStoredFile } from './utils/storage';
 
 export function createApp(): express.Express {
   const app = express();
@@ -38,10 +39,42 @@ export function createApp(): express.Express {
     res.json({ status: 'ok', service: 'backend', time: new Date().toISOString() });
   });
 
+  // Root landing response — the real API lives under /api/v1, so give humans
+  // and uptime monitors something meaningful here instead of a bare 404.
+  app.get('/', (_req, res) => {
+    res.json({
+      service: 'lms-ai-backend',
+      status: 'ok',
+      version: '0.1.0',
+      api: '/api/v1',
+      health: '/health',
+      time: new Date().toISOString(),
+    });
+  });
+
   // 100 req/min/user on everything except /auth/* and /ai/chat/* (PRD §8.9)
   app.use('/api/v1', generalRateLimiter);
 
-  // Uploaded lecture material, assignment files + generated certificate PDFs
+  // Uploaded lecture material, assignment files + generated certificate PDFs.
+  // With object storage configured the API streams the object itself (durable
+  // across redeploys); otherwise the local disk mount below serves it.
+  app.use('/uploads', async (req, res, next) => {
+    if (storageDriver() !== 'gcs') return next();
+    const key = decodeURIComponent(req.path.replace(/^\/+/, ''));
+    if (!key || key.includes('..')) {
+      res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid file key' } });
+      return;
+    }
+    try {
+      const streamed = await streamStoredFile(key, res);
+      if (!streamed) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'File not found' } });
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.use(
     '/uploads',
     express.static(path.join(process.cwd(), 'uploads'), { dotfiles: 'deny', maxAge: '1h' }),

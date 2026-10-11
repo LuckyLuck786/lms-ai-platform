@@ -1,13 +1,17 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import path from 'path';
-import fs from 'fs';
 import { authenticate } from '../../middleware/auth';
 import { query, queryOne } from '../../db/pool';
 import { notFound } from '../../utils/errors';
 import { getUserBadges } from '../../utils/badges';
 import { getStreak, touchStreak } from './gamification.service';
+import { buildCertificatePdf, certificateSerial } from '../../utils/certificate';
+import { env } from '../../config/env';
+import { cacheGet, cacheSet } from '../../db/redis';
 
 export const gamificationRouter = Router();
+
+// PRD §9.4: leaderboard reads are cached for 60 seconds.
+const LEADERBOARD_CACHE_TTL = 60;
 
 const wrap =
   (fn: (req: Request, res: Response) => Promise<void>) =>
@@ -47,33 +51,90 @@ gamificationRouter.get(
   '/users/me/certificates',
   authenticate,
   wrap(async (req, res) => {
-    const items = await query(
+    const rows = await query<{ id: string; issued_at: Date; certificate_url: string | null; course_title: string }>(
       `SELECT c.id, c.issued_at, c.certificate_url, co.title AS course_title
        FROM certificates c JOIN courses co ON co.id = c.course_id
        WHERE c.user_id = $1 ORDER BY c.issued_at DESC`,
       [req.user!.id],
     );
+    const items = rows.map((r) => ({
+      ...r,
+      serial: certificateSerial(r.id, new Date(r.issued_at)),
+    }));
     res.json({ items });
   }),
 );
 
-// GET /certificates/:id/download — PDF download (owner or admin)
+interface CertificateRow {
+  id: string;
+  user_id: string;
+  issued_at: Date;
+  student_name: string;
+  course_title: string;
+  instructor_name: string | null;
+}
+
+async function loadCertificate(id: string): Promise<CertificateRow | null> {
+  return queryOne<CertificateRow>(
+    `SELECT c.id, c.user_id, c.issued_at,
+            u.full_name AS student_name,
+            co.title AS course_title,
+            i.full_name AS instructor_name
+     FROM certificates c
+     JOIN users u ON u.id = c.user_id
+     JOIN courses co ON co.id = c.course_id
+     LEFT JOIN users i ON i.id = co.instructor_id
+     WHERE c.id = $1`,
+    [id],
+  );
+}
+
+// GET /certificates/verify/:id — PUBLIC authenticity check (no auth).
+// Powers the QR code on the PDF and the /verify/:id page on the frontend.
+gamificationRouter.get(
+  '/certificates/verify/:id',
+  wrap(async (req, res) => {
+    const cert = await loadCertificate(req.params.id);
+    if (!cert) {
+      res.status(404).json({ valid: false, reason: 'NOT_FOUND' });
+      return;
+    }
+    const issuedAt = new Date(cert.issued_at);
+    res.json({
+      valid: true,
+      certificate_id: cert.id,
+      serial: certificateSerial(cert.id, issuedAt),
+      student_name: cert.student_name,
+      course_title: cert.course_title,
+      instructor_name: cert.instructor_name,
+      issued_at: issuedAt.toISOString(),
+    });
+  }),
+);
+
+// GET /certificates/:id/download — PDF download (owner or admin).
+// The PDF is rendered on demand from the database record so downloads work on
+// any stateless Cloud Run instance (no reliance on container-local files).
 gamificationRouter.get(
   '/certificates/:id/download',
   authenticate,
   wrap(async (req, res) => {
-    const cert = await queryOne<{ id: string; user_id: string; certificate_url: string | null }>(
-      'SELECT id, user_id, certificate_url FROM certificates WHERE id = $1',
-      [req.params.id],
-    );
+    const cert = await loadCertificate(req.params.id);
     if (!cert) throw notFound('Certificate not found');
     if (cert.user_id !== req.user!.id && !req.user!.roles.includes('admin')) {
       throw notFound('Certificate not found');
     }
-    if (!cert.certificate_url || !fs.existsSync(cert.certificate_url)) {
-      throw notFound('Certificate PDF is still being generated — try again shortly');
-    }
-    res.download(path.resolve(cert.certificate_url), `certificate-${cert.id}.pdf`);
+    const bytes = await buildCertificatePdf({
+      certificateId: cert.id,
+      studentName: cert.student_name,
+      courseTitle: cert.course_title,
+      issuedAt: new Date(cert.issued_at),
+      instructorName: cert.instructor_name ?? undefined,
+      verifyBaseUrl: env.smtp.appUrl,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="certificate-${cert.id}.pdf"`);
+    res.send(Buffer.from(bytes));
   }),
 );
 
@@ -82,6 +143,13 @@ gamificationRouter.get(
   '/leaderboard/:courseId',
   authenticate,
   wrap(async (req, res) => {
+    const cacheKey = `leaderboard:${req.params.courseId}`;
+    const cached = await cacheGet<{ items: unknown[] }>(cacheKey);
+    if (cached) {
+      res.json({ ...cached, cached: true });
+      return;
+    }
+
     const rows = await query(
       `SELECT u.id AS user_id, u.full_name,
               e.progress_percent,
@@ -101,6 +169,8 @@ gamificationRouter.get(
        LIMIT 50`,
       [req.params.courseId],
     );
-    res.json({ items: rows });
+    const payload = { items: rows };
+    await cacheSet(cacheKey, payload, LEADERBOARD_CACHE_TTL);
+    res.json(payload);
   }),
 );

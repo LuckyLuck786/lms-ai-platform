@@ -2,9 +2,10 @@ import { FormEvent, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
-import { Alert, Card, Spinner } from '../../components/common/ui';
+import { Alert, Card, RatingStars, SkeletonCard } from '../../components/common/ui';
 import { Course } from '../../utils/types';
 import { useI18n } from '../../utils/i18n';
+import { GraduationCap } from '../../components/common/Icon';
 
 interface CatalogPage {
   items: Course[];
@@ -14,6 +15,7 @@ interface CatalogPage {
 }
 
 const CATEGORIES = ['Computer Science', 'Data Science', 'Mathematics', 'Business', 'Design'];
+const RATING_STEPS = ['4', '3', '2'];
 
 export default function CourseCatalog() {
   const { t } = useI18n();
@@ -21,13 +23,20 @@ export default function CourseCatalog() {
   const [q, setQ] = useState(params.get('q') ?? '');
   const category = params.get('category') ?? '';
   const difficulty = params.get('difficulty') ?? '';
+  const minRating = params.get('minRating') ?? '';
   const page = Number(params.get('page') ?? 1);
 
   const query = useQuery({
-    queryKey: ['catalog', q, category, difficulty, page],
+    queryKey: ['catalog', q, category, difficulty, minRating, page],
     queryFn: async () => {
       const { data } = await api.get<CatalogPage>('/courses', {
-        params: { q: q || undefined, category: category || undefined, difficulty: difficulty || undefined, page },
+        params: {
+          q: q || undefined,
+          category: category || undefined,
+          difficulty: difficulty || undefined,
+          minRating: minRating || undefined,
+          page,
+        },
       });
       return data;
     },
@@ -51,10 +60,13 @@ export default function CourseCatalog() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t('catalog.title')}</h1>
+      <div>
+        <p className="eyebrow mb-1">{t('catalog.subtitle')}</p>
+        <h1 className="font-display text-3xl text-ink-950 dark:text-white">{t('catalog.title')}</h1>
+      </div>
 
-      <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3" role="search">
-        <div className="min-w-[220px] flex-1">
+      <form onSubmit={onSubmit} className="card flex flex-wrap items-end gap-3 py-4" role="search">
+        <div className="min-w-[200px] flex-1">
           <label className="label" htmlFor="q">{t('common.search')}</label>
           <input
             id="q"
@@ -80,36 +92,80 @@ export default function CourseCatalog() {
             <option value="advanced">{t('catalog.difficulty.advanced')}</option>
           </select>
         </div>
+        <div>
+          <label className="label" htmlFor="minRating">{t('catalog.rating')}</label>
+          <select id="minRating" className="input" value={minRating} onChange={(e) => update({ minRating: e.target.value })}>
+            <option value="">{t('catalog.ratingAny')}</option>
+            {RATING_STEPS.map((r) => (
+              <option key={r} value={r}>{t('catalog.ratingAtLeast', { rating: r })}</option>
+            ))}
+          </select>
+        </div>
         <button type="submit" className="btn-primary">{t('common.search')}</button>
       </form>
 
       {query.error && <Alert>{apiErrorMessage(query.error)}</Alert>}
       {query.isLoading ? (
-        <div className="flex justify-center py-12"><Spinner /></div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       ) : query.data?.items?.length === 0 ? (
         <Card className="text-center text-slate-500">{t('catalog.empty')}</Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {query.data?.items.map((c) => (
-            <Link key={c.id} to={`/catalog/${c.id}`} className="card transition hover:shadow-md">
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <h2 className="font-semibold">{c.title}</h2>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs uppercase dark:bg-slate-800">
-                  {c.difficulty ?? '—'}
-                </span>
-              </div>
-              <p className="mb-3 line-clamp-2 min-h-[2.5rem] text-sm text-slate-500">
-                {c.description ?? 'No description yet.'}
-              </p>
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>{c.instructor_name}</span>
-                <span>
-                  {Number(c.price) > 0 ? `$${c.price}` : t('catalog.free')} ·{' '}
-                  {t('catalog.enrolledCount', { count: c.enrollment_count ?? 0 })}
-                </span>
-              </div>
-            </Link>
-          ))}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {query.data?.items.map((c) => {
+            const rating = Number(c.avg_rating ?? 0);
+            const reviews = Number(c.rating_count ?? 0);
+            return (
+              <Link
+                key={c.id}
+                to={`/catalog/${c.id}`}
+                className="card card-hover grid grid-cols-[120px_1fr] overflow-hidden p-0"
+              >
+                {/* Cover: instructor thumbnail, or a quiet generated plate. */}
+                <div className="relative overflow-hidden border-r border-slate-300/70 bg-paper-sunk dark:border-white/10 dark:bg-ink-800">
+                  {c.thumbnail_url ? (
+                    <img
+                      src={c.thumbnail_url}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-slate-400/60">
+                      <GraduationCap size={26} />
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col p-4">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="chip capitalize">{c.difficulty ?? t('course.allLevels')}</span>
+                    {c.category && <span className="text-[11px] text-slate-400">{c.category}</span>}
+                  </div>
+                  <h2 className="font-semibold leading-snug text-ink-950 dark:text-white">{c.title}</h2>
+                  {reviews > 0 ? (
+                    <RatingStars value={rating} count={reviews} className="mt-1.5" />
+                  ) : (
+                    <span className="mt-1.5 text-xs text-slate-400">{t('catalog.unrated')}</span>
+                  )}
+                  <p className="mb-3 mt-1.5 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+                    {c.description ?? ''}
+                  </p>
+                  <div className="mt-auto flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                    <span>{c.instructor_name}</span>
+                    <span className="font-semibold">{Number(c.price) > 0 ? `$${c.price}` : t('catalog.free')}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-400">
+                    {t('catalog.enrolledCount', { count: c.enrollment_count ?? 0 })}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
 

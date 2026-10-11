@@ -10,6 +10,9 @@ import CourseCatalog from '../pages/course-catalog/CourseCatalog';
 import CourseDetail from '../pages/course-catalog/CourseDetail';
 import CoursePlayer from '../pages/course-player/CoursePlayer';
 import QuizTake from '../pages/quizzes/QuizTake';
+import VerifyCertificate from '../pages/certificates/VerifyCertificate';
+import Terms from '../pages/legal/Terms';
+import Privacy from '../pages/legal/Privacy';
 import { useAppSelector } from '../store/hooks';
 
 function HomeRedirect() {
@@ -26,6 +29,9 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       // Public
+      { path: '/verify/:id', element: <VerifyCertificate /> },
+      { path: '/terms', element: <Terms /> },
+      { path: '/privacy', element: <Privacy /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       { path: '/catalog', element: <CourseCatalog /> },

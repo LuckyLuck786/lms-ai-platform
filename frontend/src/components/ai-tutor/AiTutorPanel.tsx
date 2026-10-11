@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Spinner } from '../common/ui';
 import { useI18n } from '../../utils/i18n';
+import { Paperclip, Target } from '../common/Icon';
+import Markdown from '../common/Markdown';
 
 interface ChatSource {
   lecture_id: string;
@@ -110,7 +112,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
   return (
     <section aria-label={t('player.aiTutor')} className="card flex h-[540px] flex-col">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="font-semibold">✨ {t('player.aiTutor')}</h2>
+        <h2 className="font-semibold">{t('player.aiTutor')}</h2>
         <label htmlFor="ai-mode" className="sr-only">{t('player.depthLabel')}</label>
         <select
           id="ai-mode"
@@ -125,8 +127,9 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
       </div>
 
       {mode === 'auto' && depth && (
-        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-          🎯 {t('ai.depthAdjusted', { depth: t(`player.mode.${depth}`) })}
+        <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+          <Target className="h-3.5 w-3.5 shrink-0" />
+          {t('ai.depthAdjusted', { depth: t(`player.mode.${depth}`) })}
         </p>
       )}
 
@@ -140,26 +143,31 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
         {items.map((m) => (
           <div
             key={m.id}
-            className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm ${
+            className={`max-w-[90%] rounded-md px-4 py-2.5 text-sm ${
               m.sender === 'user'
                 ? 'ml-auto bg-brand-600 text-white'
-                : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
+                : 'border border-slate-300/70 bg-paper-sunk text-slate-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-100'
             }`}
           >
-            <p className="whitespace-pre-wrap">{m.content}</p>
+            {m.sender === 'ai' ? (
+              <Markdown content={m.content} className="leading-relaxed" />
+            ) : (
+              <p className="whitespace-pre-wrap">{m.content}</p>
+            )}
             {m.sender === 'ai' && m.sources && m.sources.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {m.sources.map((s) => (
                   <span
                     key={s.lecture_id}
-                    className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                    className="inline-flex items-center gap-1 rounded-sm border border-slate-300/70 px-2 py-0.5 text-[11px] text-slate-600 dark:border-white/15 dark:text-slate-300"
                     title={
                       s.timestamp_seconds != null
                         ? t('ai.citationTitle', { seconds: s.timestamp_seconds })
                         : undefined
                     }
                   >
-                    📎 {s.lecture_title ?? 'lecture'}
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    {s.lecture_title ?? 'lecture'}
                     {s.timestamp_seconds != null && ` @ ${Math.floor(s.timestamp_seconds / 60)}:${String(s.timestamp_seconds % 60).padStart(2, '0')}`}
                   </span>
                 ))}
@@ -168,7 +176,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
           </div>
         ))}
         {send.isPending && (
-          <div className="w-fit rounded-2xl bg-slate-100 px-4 py-2.5 dark:bg-slate-800">
+          <div className="w-fit rounded-md border border-slate-300/70 bg-paper-sunk px-4 py-2.5 dark:border-white/10 dark:bg-ink-800">
             <Spinner className="h-4 w-4" />
           </div>
         )}
