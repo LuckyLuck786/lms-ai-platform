@@ -197,6 +197,31 @@ export async function requestTranscription(lectureId: string): Promise<void> {
 }
 
 /**
+ * Nightly recommendation recalculation (PRD §9.3), called by the scheduled
+ * worker job. The AI service owns the scoring and walks every learner itself;
+ * a non-2xx throws so BullMQ records the failure and retries with backoff.
+ */
+export async function requestRecommendationRecompute(): Promise<{
+  users: number;
+  updated: number;
+  failed: number;
+}> {
+  const upstream = await fetch(`${env.aiServiceUrl}/api/v1/ai/internal/recommendations/recompute`, {
+    method: 'POST',
+    headers: internalHeaders(),
+    // Every learner costs an embedding call; a large platform takes minutes.
+    signal: AbortSignal.timeout(900_000),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok) {
+    throw new Error(`recommendation recompute failed: HTTP ${upstream.status} ${text.slice(0, 400)}`);
+  }
+  const summary = JSON.parse(text) as { users: number; updated: number; failed: number };
+  logger.info('recommendations_recomputed', summary);
+  return summary;
+}
+
+/**
  * Turn a stored `/uploads/...` path into an absolute URL.
  *
  * Absolute, object and data URLs pass through; anything else would resolve

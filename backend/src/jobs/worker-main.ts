@@ -1,11 +1,12 @@
 import { startWorkers } from './worker';
-import { registerStreakCron } from './queues';
+import { registerRecommendationCron, registerStreakCron } from './queues';
 import { logger } from '../utils/logger';
 
 /** Standalone worker process: `npm run worker`. */
 async function main(): Promise<void> {
   const workers = startWorkers();
   await registerStreakCron();
+  await registerRecommendationCron();
   logger.info('worker_process_ready');
 
   const shutdown = async () => {

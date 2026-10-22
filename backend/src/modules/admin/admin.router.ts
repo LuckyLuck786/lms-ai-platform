@@ -5,6 +5,7 @@ import { query, queryOne, withTransaction } from '../../db/pool';
 import { notFound, badRequest } from '../../utils/errors';
 import { revokeAllRefreshTokens } from '../../utils/jwt';
 import { listPendingCourses } from '../courses/courses.service';
+import { pageEnvelope, parsePage } from '../../utils/pagination';
 import { logger } from '../../utils/logger';
 import { env } from '../../config/env';
 import { sendEmail, smtpConfigured, verifySmtp } from '../../services/email';
@@ -107,8 +108,10 @@ adminRouter.get(
       params.push(`%${q}%`);
       where = `(u.full_name ILIKE $1 OR u.email ILIKE $1)`;
     }
-    const items = await query(
-      `SELECT u.id, u.full_name, u.email, u.is_active, u.created_at,
+    const pg = parsePage(req.query, 100);
+    params.push(pg.limit, pg.offset);
+    const rows = await query<{ total_count: number }>(
+      `SELECT u.id, u.full_name, u.email, u.is_active, u.created_at, count(*) OVER() AS total_count,
               COALESCE(ARRAY_AGG(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS roles,
               (SELECT count(*)::int FROM enrollments e WHERE e.user_id = u.id) AS enrollment_count
        FROM users u
@@ -117,10 +120,10 @@ adminRouter.get(
        WHERE ${where}
        GROUP BY u.id
        ORDER BY u.created_at DESC
-       LIMIT 100`,
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
-    res.json({ items });
+    res.json(pageEnvelope(rows, pg));
   }),
 );
 
@@ -191,9 +194,10 @@ adminRouter.get(
 // GET /admin/moderation/flagged-posts — reported forum content (FR-AD5)
 adminRouter.get(
   '/admin/moderation/flagged-posts',
-  wrap(async (_req, res) => {
-    const items = await query(
-      `SELECT p.id, p.content, p.created_at, u.full_name AS author_name,
+  wrap(async (req, res) => {
+    const pg = parsePage(req.query, 100);
+    const rows = await query<{ total_count: number }>(
+      `SELECT p.id, p.content, p.created_at, u.full_name AS author_name, count(*) OVER() AS total_count,
               t.title AS thread_title, t.course_id, c.title AS course_title
        FROM discussion_posts p
        JOIN discussion_threads t ON t.id = p.thread_id
@@ -201,9 +205,10 @@ adminRouter.get(
        JOIN users u ON u.id = p.user_id
        WHERE p.is_flagged
        ORDER BY p.created_at DESC
-       LIMIT 100`,
+       LIMIT $1 OFFSET $2`,
+      [pg.limit, pg.offset],
     );
-    res.json({ items });
+    res.json(pageEnvelope(rows, pg));
   }),
 );
 
@@ -222,13 +227,16 @@ adminRouter.delete(
 // GET /admin/audit-logs — recent administrative actions
 adminRouter.get(
   '/admin/audit-logs',
-  wrap(async (_req, res) => {
-    const items = await query(
-      `SELECT a.id, a.action, a.entity, a.entity_id, a.metadata, a.created_at, u.full_name AS actor_name
+  wrap(async (req, res) => {
+    const pg = parsePage(req.query, 50);
+    const rows = await query<{ total_count: number }>(
+      `SELECT a.id, a.action, a.entity, a.entity_id, a.metadata, a.created_at, u.full_name AS actor_name,
+              count(*) OVER() AS total_count
        FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
-       ORDER BY a.created_at DESC LIMIT 50`,
+       ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`,
+      [pg.limit, pg.offset],
     );
-    res.json({ items });
+    res.json(pageEnvelope(rows, pg));
   }),
 );
 

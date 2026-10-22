@@ -9,6 +9,7 @@ import type { EmailCta, EmailKind } from '../services/email';
  *  - certificates: generated when a learner hits 100% course completion
  *  - notifications: transactional email dispatch (SMTP)
  *  - streaks: daily cron evaluating broken streaks platform-wide
+ *  - recommendations: nightly cron recomputing every learner's suggestions
  */
 
 // BullMQ requires maxRetriesPerRequest: null on its shared connection.
@@ -20,6 +21,7 @@ let streakQueue: Queue | null = null;
 let notificationQueue: Queue | null = null;
 let masteryQueue: Queue | null = null;
 let transcriptionQueue: Queue | null = null;
+let recommendationQueue: Queue | null = null;
 
 export interface EmailJob {
   kind: EmailKind;
@@ -133,6 +135,31 @@ export async function queueTranscription(payload: {
   }
 }
 
+function getRecommendationQueue(): Queue {
+  recommendationQueue ??= new Queue('recommendations', { connection: queueConnection() });
+  return recommendationQueue;
+}
+
+/**
+ * Registers the nightly recommendation recalculation (PRD §9.3, idempotent).
+ * Runs at 02:00 UTC, an hour ahead of the streak job, so the two batch scans
+ * never compete for the database.
+ */
+export async function registerRecommendationCron(): Promise<void> {
+  try {
+    await getRecommendationQueue().upsertJobScheduler(
+      'recommendations-nightly',
+      { pattern: '0 2 * * *' },
+      { name: 'recompute-all', data: {} },
+    );
+    logger.info('recommendation_cron_registered');
+  } catch (err) {
+    logger.warn('recommendation_cron_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /** Registers the daily streak-evaluation cron (idempotent). */
 export async function registerStreakCron(): Promise<void> {
   try {
@@ -155,5 +182,6 @@ export async function closeQueues(): Promise<void> {
     notificationQueue?.close(),
     masteryQueue?.close(),
     transcriptionQueue?.close(),
+    recommendationQueue?.close(),
   ]);
 }

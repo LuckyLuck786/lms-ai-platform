@@ -1,4 +1,9 @@
 import hmac
+import json
+import re
+import sys
+import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,6 +58,43 @@ async def require_internal_token(request: Request, call_next):
     return await call_next(request)
 
 
+# Registered last so it runs outermost: 401s from the token guard are logged too.
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+
+
+@app.middleware("http")
+async def request_id_and_log(request: Request, call_next):
+    """Correlate a request with the backend call that caused it.
+
+    The backend forwards its own `X-Request-Id`; honouring it means one user
+    action can be followed across both services' logs. The value is caller
+    input that lands inside a JSON log line, so it is validated with the same
+    rule the backend uses, and replaced when it fails.
+    """
+    inbound = request.headers.get("x-request-id", "")
+    request_id = inbound if _REQUEST_ID.match(inbound) else str(uuid.uuid4())
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request_id
+    print(
+        json.dumps(
+            {
+                "level": "info",
+                "msg": "request",
+                "service": "ai-service",
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": round((time.perf_counter() - start) * 1000, 2),
+                "request_id": request_id,
+            }
+        ),
+        file=sys.stdout,
+        flush=True,
+    )
+    return response
+
+
 app.include_router(chat.router, prefix="/api/v1/ai/chat", tags=["ai-chat"])
 app.include_router(summarize.router, prefix="/api/v1/ai", tags=["ai-summarize"])
 app.include_router(quiz_gen.router, prefix="/api/v1/ai", tags=["ai-quiz-gen"])
@@ -63,6 +105,9 @@ app.include_router(ingest.router, prefix="/api/v1/ai/internal", tags=["ai-ingest
 # and the internal-token guard covers it as part of /api/v1/ai.
 app.include_router(transcribe.router, prefix="/api/v1/ai/internal", tags=["ai-transcription"])
 app.include_router(recommendations.router, prefix="/api/v1/ai", tags=["ai-recommendations"])
+app.include_router(
+    recommendations.internal_router, prefix="/api/v1/ai/internal", tags=["ai-recommendations"]
+)
 
 
 @app.get("/health", tags=["health"])

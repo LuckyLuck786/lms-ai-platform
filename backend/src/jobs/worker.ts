@@ -3,7 +3,7 @@ import { query, queryOne } from '../db/pool';
 import { generateCertificatePdf } from '../utils/certificate';
 import { evaluateAllStreaks } from '../modules/gamification/gamification.service';
 import { EmailJob, queueConnection, queueEmail } from './queues';
-import { requestTranscription } from '../modules/ai/ai.router';
+import { requestRecommendationRecompute, requestTranscription } from '../modules/ai/ai.router';
 import { recomputeTopicMasterySafe } from '../utils/mastery';
 import { closeEmailTransport, sendEmail } from '../services/email';
 import { logger } from '../utils/logger';
@@ -114,12 +114,21 @@ export function startWorkers(): { close: () => Promise<void> } {
     { connection: queueConnection(), concurrency: 1 },
   );
 
+  // Nightly recommendation recalculation (PRD §9.3). Concurrency 1 — the AI
+  // service already walks every learner inside one job.
+  const recommendationWorker = new Worker(
+    'recommendations',
+    async () => requestRecommendationRecompute(),
+    { connection: queueConnection(), concurrency: 1 },
+  );
+
   for (const [name, w] of [
     ['certificates', certificateWorker],
     ['streaks', streakWorker],
     ['notifications', notificationWorker],
     ['mastery', masteryWorker],
     ['transcription', transcriptionWorker],
+    ['recommendations', recommendationWorker],
   ] as const) {
     w.on('failed', (job, err) => {
       logger.error('job_failed', { queue: name, jobId: job?.id, error: err.message });
@@ -127,7 +136,7 @@ export function startWorkers(): { close: () => Promise<void> } {
   }
 
   logger.info('workers_started', {
-    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription'],
+    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription', 'recommendations'],
   });
 
   return {
@@ -138,6 +147,7 @@ export function startWorkers(): { close: () => Promise<void> } {
         notificationWorker.close(),
         masteryWorker.close(),
         transcriptionWorker.close(),
+        recommendationWorker.close(),
         closeEmailTransport(),
       ]);
     },

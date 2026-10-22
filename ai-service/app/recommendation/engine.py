@@ -139,3 +139,29 @@ def build_recommendations(user_id: str) -> dict:
             for r in top
         ]
     }
+
+
+def recompute_all() -> dict:
+    """Nightly recommendation recalculation (PRD §9.3).
+
+    Rebuilds the stored set for every active learner with some signal to work
+    from — an enrolment or a submitted quiz. One learner failing (a bad row, an
+    embedding provider hiccup) must not abort the whole night's run, so errors
+    are counted per user rather than raised.
+    """
+    users = query_all(
+        """
+        SELECT u.id FROM users u
+        WHERE u.is_active
+          AND (EXISTS (SELECT 1 FROM enrollments e WHERE e.user_id = u.id)
+               OR EXISTS (SELECT 1 FROM quiz_attempts qa WHERE qa.user_id = u.id))
+        """
+    )
+    updated, failed = 0, 0
+    for row in users:
+        try:
+            build_recommendations(str(row["id"]))
+            updated += 1
+        except Exception:  # noqa: BLE001 — isolate one learner's failure
+            failed += 1
+    return {"users": len(users), "updated": updated, "failed": failed}

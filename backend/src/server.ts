@@ -4,7 +4,7 @@ import { logger } from './utils/logger';
 import { pool } from './db/pool';
 import { redis } from './db/redis';
 import { startWorkers } from './jobs/worker';
-import { closeQueues, registerStreakCron } from './jobs/queues';
+import { closeQueues, registerRecommendationCron, registerStreakCron } from './jobs/queues';
 
 const app = createApp();
 
@@ -18,6 +18,7 @@ let workers: { close: () => Promise<void> } | null = null;
 if (process.env.DISABLE_INLINE_WORKER !== '1') {
   workers = startWorkers();
   void registerStreakCron();
+  void registerRecommendationCron();
 }
 
 async function shutdown(signal: string): Promise<void> {
