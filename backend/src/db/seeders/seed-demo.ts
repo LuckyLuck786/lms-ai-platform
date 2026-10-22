@@ -1,5 +1,6 @@
 import { query, queryOne, pool } from '../pool';
 import { hashPassword } from '../../utils/password';
+import { emailHash, encryptPii } from '../../utils/pii';
 
 /**
  * Demo data seeder (`npm run seed`). Idempotent: re-running upserts by
@@ -13,14 +14,16 @@ import { hashPassword } from '../../utils/password';
 
 async function upsertUser(fullName: string, email: string, role: string): Promise<string> {
   const password_hash = await hashPassword('DemoPass123!');
-  const existing = await queryOne<{ id: string }>('SELECT id FROM users WHERE email = $1', [email]);
+  const existing = await queryOne<{ id: string }>('SELECT id FROM users WHERE email_hash = $1', [
+    emailHash(email),
+  ]);
   let userId: string;
   if (existing) {
     userId = existing.id;
   } else {
     const row = await queryOne<{ id: string }>(
-      'INSERT INTO users (full_name, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
-      [fullName, email, password_hash],
+      'INSERT INTO users (full_name, email, email_hash, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
+      [fullName, encryptPii(email), emailHash(email), password_hash],
     );
     userId = row!.id;
   }

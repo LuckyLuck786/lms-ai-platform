@@ -9,6 +9,7 @@ import { pageEnvelope, parsePage } from '../../utils/pagination';
 import { logger } from '../../utils/logger';
 import { env } from '../../config/env';
 import { sendEmail, smtpConfigured, verifySmtp } from '../../services/email';
+import { decryptPii, emailHash } from '../../utils/pii';
 
 /**
  * Admin panel APIs (FR-AD1..FR-AD5, PRD §8.7). Every route requires the
@@ -105,8 +106,10 @@ adminRouter.get(
     const params: unknown[] = [];
     let where = 'TRUE';
     if (q) {
-      params.push(`%${q}%`);
-      where = `(u.full_name ILIKE $1 OR u.email ILIKE $1)`;
+      // Emails are encrypted, so they match exactly via the blind index;
+      // names still match by substring.
+      params.push(`%${q}%`, emailHash(q));
+      where = `(u.full_name ILIKE $1 OR u.email_hash = $2)`;
     }
     const pg = parsePage(req.query, 100);
     params.push(pg.limit, pg.offset);
@@ -123,7 +126,8 @@ adminRouter.get(
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
-    res.json(pageEnvelope(rows, pg));
+    const page = pageEnvelope(rows as ({ email: string; total_count: number })[], pg);
+    res.json({ ...page, items: page.items.map((u) => ({ ...u, email: decryptPii(u.email) })) });
   }),
 );
 

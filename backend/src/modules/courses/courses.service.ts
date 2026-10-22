@@ -100,7 +100,7 @@ export async function listCatalog(q: CatalogQuery, user?: AuthUser) {
 
 export async function getCourseDetail(id: string, user?: AuthUser) {
   const course = await queryOne(
-    `SELECT c.*, u.full_name AS instructor_name, u.email AS instructor_email,
+    `SELECT c.*, u.full_name AS instructor_name,
             COALESCE(r.avg_rating, 0)::float AS avg_rating,
             COALESCE(r.rating_count, 0)::int AS rating_count
      FROM courses c

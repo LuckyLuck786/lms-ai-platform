@@ -4,6 +4,7 @@ import { authenticate, requireRole } from '../../middleware/auth';
 import { query, queryOne } from '../../db/pool';
 import { forbidden, notFound } from '../../utils/errors';
 import { queueEmail } from '../../jobs/queues';
+import { decryptPii } from '../../utils/pii';
 
 export const announcementsRouter = Router();
 
@@ -58,7 +59,7 @@ announcementsRouter.post(
         kind: 'announcement',
         subject: `New announcement in ${course.title}`,
         body: input.content,
-        recipients: students.map((s) => s.email),
+        recipients: students.map((s) => decryptPii(s.email)),
       });
     }
 

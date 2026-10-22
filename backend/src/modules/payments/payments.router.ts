@@ -8,6 +8,7 @@ import { badRequest, notFound, conflict, forbidden, serviceUnavailable } from '.
 import { env } from '../../config/env';
 import { queueEmail } from '../../jobs/queues';
 import { logger } from '../../utils/logger';
+import { decryptPii } from '../../utils/pii';
 
 /**
  * Payments / checkout (PRD §15 item 4).
@@ -148,7 +149,7 @@ async function confirmPayment(params: {
           `Hello ${buyer.full_name},\n\n` +
           `Your payment of ₹${Number(payment?.amount ?? course.price)} for “${course.title}” has been confirmed. ` +
           'You are now enrolled — head to your dashboard to start learning.',
-        recipients: [buyer.email],
+        recipients: [decryptPii(buyer.email)],
         cta: { label: 'Go to dashboard', path: '/dashboard' },
       });
     }
@@ -444,7 +445,7 @@ paymentsRouter.post(
         `A payment of ₹${Number(payment.amount ?? 0)} was recorded for “${course.title}” on ` +
         `${new Date().toLocaleDateString()}.\n\n` +
         'If you have not enrolled yet, contact support — your enrolment may still be pending.',
-      recipients: [user.email],
+      recipients: [decryptPii(user.email)],
       cta: { label: 'View course', path: '/catalog' },
     });
 

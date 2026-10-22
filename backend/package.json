@@ -2,7 +2,7 @@
   "name": "@lms-ai/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Core LMS service — Express + TypeScript REST API with RBAC",
+  "description": "Core LMS service \u2014 Express + TypeScript REST API with RBAC",
   "type": "commonjs",
   "main": "dist/server.js",
   "scripts": {
@@ -13,7 +13,8 @@
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seeders/seed-demo.ts",
     "worker": "tsx src/jobs/worker-main.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.4.0",
@@ -31,6 +32,7 @@
     "pdf-lib": "^1.17.1",
     "pg": "^8.13.1",
     "qrcode": "^1.5.4",
+    "rate-limit-redis": "^4.3.1",
     "razorpay": "^2.9.8",
     "tsx": "^4.19.2",
     "zod": "^3.23.8"

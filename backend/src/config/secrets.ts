@@ -26,6 +26,8 @@ export const DEV_SECRET_PLACEHOLDERS: readonly string[] = [
   'dev-only-change-me-jwt-secret-32-chars-min',
   'dev-only-change-me-refresh-secret-32-chars',
   'postgresql://lms:lms_dev_password@localhost:5432/lms',
+  'dev-only-pii-encryption-key-change-me',
+  'dev-only-pii-hash-key-change-me',
 ];
 
 const PLACEHOLDER_SET = new Set(DEV_SECRET_PLACEHOLDERS);

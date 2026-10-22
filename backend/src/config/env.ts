@@ -81,6 +81,15 @@ export const env = {
     refreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS ?? 7),
   },
 
+  // Column-level encryption of personal data (NFR §6). The encryption key
+  // protects stored emails; the hash key builds the blind index used to look a
+  // user up by email without decrypting every row. Losing either key makes
+  // existing emails unreadable or unfindable — they live in Secret Manager.
+  pii: {
+    encryptionKey: secret('PII_ENCRYPTION_KEY', 'dev-only-pii-encryption-key-change-me'),
+    hashKey: secret('PII_HASH_KEY', 'dev-only-pii-hash-key-change-me'),
+  },
+
   // Durable object storage for uploaded material. When GCS_BUCKET is set the
   // storage driver writes to Google Cloud Storage using the runtime service
   // account (Application Default Credentials) instead of the container disk,

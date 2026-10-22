@@ -10,6 +10,7 @@ import {
 } from '../../utils/jwt';
 import { badRequest, conflict, unauthorized, forbidden, notFound } from '../../utils/errors';
 import { LoginInput, RegisterInput } from './auth.schemas';
+import { decryptPii, emailHash, encryptPii, normaliseEmail } from '../../utils/pii';
 
 export interface UserRow {
   id: string;
@@ -48,7 +49,7 @@ export async function toPublicUser(user: UserRow): Promise<PublicUser> {
   return {
     id: user.id,
     full_name: user.full_name,
-    email: user.email,
+    email: decryptPii(user.email),
     avatar_url: user.avatar_url,
     role: roles[0] ?? 'student',
     roles: roles.length ? roles : ['student'],
@@ -59,7 +60,7 @@ async function issueTokens(user: UserRow): Promise<AuthResponse> {
   const publicUser = await toPublicUser(user);
   const access_token = signAccessToken({
     sub: user.id,
-    email: user.email,
+    email: publicUser.email,
     roles: publicUser.roles,
   });
   const refresh_token = await issueRefreshToken(user.id);
@@ -67,7 +68,9 @@ async function issueTokens(user: UserRow): Promise<AuthResponse> {
 }
 
 export async function register(input: RegisterInput): Promise<AuthResponse> {
-  const existing = await queryOne('SELECT id FROM users WHERE email = $1', [input.email.toLowerCase()]);
+  const existing = await queryOne('SELECT id FROM users WHERE email_hash = $1', [
+    emailHash(input.email),
+  ]);
   if (existing) throw conflict('An account with this email already exists', 'email');
 
   const password_hash = await hashPassword(input.password);
@@ -78,8 +81,8 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
     if (!role.rowCount) throw badRequest(`Unknown role: ${roleName}`, 'role');
 
     const user = await client.query<UserRow>(
-      'INSERT INTO users (full_name, email, password_hash) VALUES ($1, $2, $3) RETURNING *',
-      [input.full_name, input.email.toLowerCase(), password_hash],
+      'INSERT INTO users (full_name, email, email_hash, password_hash) VALUES ($1, $2, $3, $4) RETURNING *',
+      [input.full_name, encryptPii(normaliseEmail(input.email)), emailHash(input.email), password_hash],
     );
     await client.query('INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)', [
       user.rows[0].id,
@@ -92,8 +95,8 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
 }
 
 export async function login(input: LoginInput): Promise<AuthResponse> {
-  const user = await queryOne<UserRow>('SELECT * FROM users WHERE email = $1', [
-    input.email.toLowerCase(),
+  const user = await queryOne<UserRow>('SELECT * FROM users WHERE email_hash = $1', [
+    emailHash(input.email),
   ]);
   if (!user) throw unauthorized('Invalid email or password');
 
@@ -113,7 +116,7 @@ export async function refresh(refreshToken: string): Promise<AuthResponse> {
   const publicUser = await toPublicUser(user);
   const access_token = signAccessToken({
     sub: user.id,
-    email: user.email,
+    email: publicUser.email,
     roles: publicUser.roles,
   });
   return { access_token, refresh_token: newToken, user: publicUser };

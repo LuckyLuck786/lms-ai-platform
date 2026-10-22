@@ -5,6 +5,7 @@ import { query, queryOne } from '../../db/pool';
 import { forbidden, notFound } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { queueEmail } from '../../jobs/queues';
+import { decryptPii } from '../../utils/pii';
 
 /**
  * Per-course threaded discussion forum (PRD §3.1 / FR-AD5).
@@ -130,9 +131,16 @@ discussionsRouter.post(
     // Notify the thread author about new activity (not on self-reply),
     // in-app and by email so a slow thread still reaches them.
     if (thread.created_by !== req.user!.id) {
+      // Identify the replier by name: their email address is personal data
+      // the thread author has no need to see.
+      const replier = await queryOne<{ full_name: string }>(
+        'SELECT full_name FROM users WHERE id = $1',
+        [req.user!.id],
+      );
+      const replierName = replier?.full_name ?? 'Someone';
       await query(
         'INSERT INTO notifications (user_id, title, body) VALUES ($1, $2, $3)',
-        [thread.created_by, 'New reply in your thread', `${req.user!.email} replied: ${input.content.slice(0, 120)}`],
+        [thread.created_by, 'New reply in your thread', `${replierName} replied: ${input.content.slice(0, 120)}`],
       );
 
       const author = await queryOne<{ email: string; is_active: boolean }>(
@@ -143,8 +151,8 @@ discussionsRouter.post(
         await queueEmail({
           kind: 'discussion',
           subject: `New reply in “${thread.title}”`,
-          body: `${req.user!.email} replied:\n\n${input.content.slice(0, 600)}`,
-          recipients: [author.email],
+          body: `${replierName} replied:\n\n${input.content.slice(0, 600)}`,
+          recipients: [decryptPii(author.email)],
           cta: { label: 'Open the thread', path: `/courses/${thread.course_id}/discussions` },
         });
       }

@@ -8,6 +8,7 @@ import { recomputeTopicMasterySafe } from '../utils/mastery';
 import { closeEmailTransport, sendEmail } from '../services/email';
 import { logger } from '../utils/logger';
 import { env } from '../config/env';
+import { decryptPii } from '../utils/pii';
 
 /**
  * Background workers (PRD §9.3): certificate PDF generation + daily streak
@@ -61,7 +62,7 @@ export function startWorkers(): { close: () => Promise<void> } {
         body:
           `Congratulations ${user.full_name}! You completed “${course.title}”.\n\n` +
           'Your certificate PDF is available on your dashboard.',
-        recipients: [student.email],
+        recipients: [decryptPii(student.email)],
         cta: { label: 'View certificate', path: '/dashboard' },
       });
 
