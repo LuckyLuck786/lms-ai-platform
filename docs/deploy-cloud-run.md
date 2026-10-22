@@ -36,13 +36,16 @@ project `transitviz-67dus`, region `us-central1`:
 | Email | Gmail SMTP (`smtp.gmail.com:465`, app password) | Google Cloud has no email-sending product; ports 465/587 are open from Cloud Run |
 | Monitoring | Uptime checks `lms-backend-health`, `lms-ai-service-health` (5 min) + alert policy "LMS-AI service down" | Emails the owner |
 | Budget | "LMS-AI monthly", ₹6,000, alerts at 50/90/100 % | Measured before credits |
+| Backups | Daily automated (20:30 UTC), 7 retained, point-in-time recovery | Cloud SQL |
+| CI/CD | `.github/workflows/deploy.yml` after green CI on `main` | Service account `github-deployer` via Workload Identity pool `github` — no keys; accepts only `LuckyLuck786/lms-ai-platform` on `refs/heads/main` |
 
 Both Cloud Run URL forms resolve to the same service and are interchangeable:
 `backend-381741146904.us-central1.run.app` and `backend-mqkhx6y4xq-uc.a.run.app`.
 
 **Secrets** (Secret Manager, mounted with `--set-secrets` / `--update-secrets`):
 `database-url`, `redis-url`, `jwt-secret`, `jwt-refresh-secret`,
-`internal-api-token`, `smtp-url`, `groq-api-key`, `gemini-api-key`. No secret is
+`internal-api-token`, `smtp-url`, `groq-api-key`, `gemini-api-key`,
+`pii-encryption-key`, `pii-hash-key`. No secret is
 set as a plain environment variable.
 
 **Why the AI service keeps public ingress.** Section 4 below describes
@@ -52,7 +55,11 @@ need all backend egress through the VPC plus Cloud NAT for SMTP. The deployed
 choice is public ingress with a mandatory 64-character `X-Internal-Token`,
 compared in constant time. An unauthenticated call returns 401.
 
-**Redeploying.**
+**PII keys.** `pii-encryption-key` decrypts every stored email and
+`pii-hash-key` finds users by email. Destroying or rotating either without a
+re-encryption pass locks every user out. Never delete them.
+
+**Redeploying.** Pushing to `main` deploys automatically once CI passes. By hand:
 
 ```bash
 SHA=$(git rev-parse --short HEAD)
@@ -233,8 +240,9 @@ backend and needs no server at all.
 - ~~**No uptime or error alerting.**~~ Closed 23 Oct 2026 — uptime checks on
   both `/health` endpoints with an email alert policy (§0). Error-rate alerting
   on 5xx responses is still not configured.
-- **Rate limits are per instance.** `express-rate-limit` uses its in-memory
-  store, so with `maxScale=3` the effective ceiling is up to 3× the PRD §8.9
-  limit. A Redis-backed store would make it exact.
-- **Backups are unverified.** Cloud SQL takes automated backups, but a restore
-  has never been rehearsed.
+- ~~**Rate limits are per instance.**~~ Closed — Redis-backed store.
+- ~~**Backups are unverified.**~~ Closed 23 Oct 2026 — point-in-time clone
+  `lms-restore-drill` restored from 10 minutes earlier matched production row
+  for row (7 users, 4 courses, 2 enrolments, 8 RAG chunks, 15 migrations),
+  then was deleted. Repeat with
+  `gcloud sql instances clone lms-postgres <name> --point-in-time <UTC time>`.

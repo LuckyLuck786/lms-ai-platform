@@ -35,12 +35,21 @@ below reads as open, this table takes precedence.**
 | 5 C | AI service bypassable | ✅ **Closed** — `INTERNAL_API_TOKEN` now set in production (it was unset, so the guard was off); unauthenticated calls return 401 | live probe |
 | — | Budget guard | ➕ **Added** — ₹6,000/month budget, alerts at 50/90/100 % before credits | Cloud Billing |
 
-**Still open:** §3.7 Playwright E2E + CI deploy stage, §3.11 PII column
-encryption, §3.12 integration tests against real Postgres/Redis, §4.2 #8 CDN
-for video, per-instance rate-limit store ([`deploy-cloud-run.md` §8](deploy-cloud-run.md)).
+| 3.7 | Playwright E2E + CI deploy | ✅ **Closed** — `e2e/` suite (5 browser tests) and a CI job that runs it against the full stack; `deploy.yml` deploys after green CI on `main`, keyless via Workload Identity Federation | CI run 39837360126: all jobs green |
+| 3.11 | PII encryption | ✅ **Closed** — `users.email` is AES-256-GCM ciphertext with an HMAC blind index; production backfilled on boot (7 of 7 rows, 0 plaintext). Admin search by email is now exact-match only | `utils/pii.ts`, migration `015`, `tests/pii.test.ts`, integration suite |
+| 3.12 | Integration tests | ✅ **Closed** — `npm run test:integration`: 13 tests against real pgvector Postgres + Redis, from an empty database | CI job "Backend integration" |
+| §8 | Per-instance rate limits | ✅ **Closed** — Redis store shared by all instances; general limit keyed by the bearer token's user | `middleware/rateLimit.ts`, integration test |
+| — | Backups + PITR | ➕ **Added** — daily automated backups, 7 retained, point-in-time recovery on | Cloud SQL |
+| — | Privacy leaks | ➕ **Fixed** — public course detail returned the instructor's email; forum reply notifications showed the replier's email | `courses.service.ts`, `discussions.router.ts` |
 
-Tests after these changes: backend **105 passed / 13 files**, ai-service
-**70 passed, 1 skipped**, backend typecheck clean.
+**Not built — §4.2 #8 CDN for video.** The media bucket holds 2 KB; all eight
+lecture videos are hosted externally. Cloud CDN needs an HTTPS load balancer
+(~₹1,500/month), a domain for its certificate, and signed URLs (the bucket
+also holds private submissions and certificates). Worth revisiting once
+instructors upload video to the platform itself.
+
+Tests after these changes: backend **113 unit + 13 integration**, ai-service
+**70 passed, 1 skipped**, **5 Playwright E2E**, backend typecheck clean.
 
 ---
 
