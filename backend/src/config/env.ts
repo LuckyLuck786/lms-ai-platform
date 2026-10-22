@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { resolveSecret } from './secrets';
 
 /**
  * Locate the monorepo `.env` by walking up from the working directory.
@@ -26,28 +27,56 @@ const envFile = process.env.DOTENV_PATH ?? findEnvFile();
 if (envFile) dotenv.config({ path: envFile });
 dotenv.config({ override: true }); // a service-local ./.env wins if present
 
-function required(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
-  if (value === undefined) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
+/**
+ * Read once, before `env` is built, so `resolveSecret` can enforce the
+ * production rules while the object literal is still being constructed.
+ */
+const isProd = process.env.NODE_ENV === 'production';
+
+// PORT is injected by cloud hosts (Render/Cloud Run set $PORT); BACKEND_PORT
+// is local. `PORT=0` means "ask the OS for an ephemeral port", which is fine
+// for listening but useless for building URLs — hence the 4000 fallback below.
+const port = Number(process.env.PORT ?? process.env.BACKEND_PORT ?? 4000);
+const listenPort = port || 4000;
+
+/** Production-only: refuse to boot on a missing or placeholder secret. */
+const secret = (name: string, devDefault: string): string =>
+  resolveSecret(name, process.env[name], { isProd, devDefault });
 
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
-  isProd: process.env.NODE_ENV === 'production',
-  // PORT is injected by cloud hosts (Render sets $PORT); BACKEND_PORT is local.
-  port: Number(process.env.PORT ?? process.env.BACKEND_PORT ?? 4000),
+  isProd,
+  port,
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
 
-  databaseUrl: required('DATABASE_URL', 'postgresql://lms:lms_dev_password@localhost:5432/lms'),
+  /**
+   * Absolute origin of this API.
+   *
+   * The AI service cannot fetch a backend-relative `/uploads/...` path — it
+   * runs as its own process and resolves URLs from its own origin. Anything
+   * that hands a media URL to another service (transcription) needs this.
+   */
+  publicApiUrl: (process.env.PUBLIC_API_URL ?? `http://localhost:${listenPort}`).replace(
+    /\/+$/,
+    '',
+  ),
+
+  databaseUrl: secret('DATABASE_URL', 'postgresql://lms:lms_dev_password@localhost:5432/lms'),
   redisUrl: process.env.REDIS_URL ?? 'redis://localhost:6379',
   aiServiceUrl: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
 
+  // Shared secret presented to the AI service as `X-Internal-Token`. The AI
+  // service stays private behind the backend; this is the code-level guard so
+  // the RAG ingest route cannot be driven by a third party even if the
+  // service is reachable. Empty means "not enforced" (local development).
+  internalApiToken: process.env.INTERNAL_API_TOKEN ?? '',
+
   jwt: {
-    secret: required('JWT_SECRET', 'dev-only-change-me-jwt-secret-32-chars-min'),
-    refreshSecret: required('JWT_REFRESH_SECRET', 'dev-only-change-me-refresh-secret-32-chars'),
+    // Production refuses the placeholders that ship in .env.example — see
+    // config/secrets.ts. An unset secret in production means forgeable tokens,
+    // so it fails the boot rather than starting quietly.
+    secret: secret('JWT_SECRET', 'dev-only-change-me-jwt-secret-32-chars-min'),
+    refreshSecret: secret('JWT_REFRESH_SECRET', 'dev-only-change-me-refresh-secret-32-chars'),
     accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
     refreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS ?? 7),
   },

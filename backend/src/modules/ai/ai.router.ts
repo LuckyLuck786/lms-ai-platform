@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { authenticate } from '../../middleware/auth';
 import { aiChatRateLimiter } from '../../middleware/rateLimit';
 import { env } from '../../config/env';
@@ -16,6 +17,37 @@ import { queueMasteryRecompute } from '../../jobs/queues';
 export const aiRouter = Router();
 
 const AI_TIMEOUT_MS = 60_000;
+
+/**
+ * Headers every call to the AI service carries.
+ *
+ * `X-Internal-Token` proves the caller is this backend; the AI service rejects
+ * requests without it whenever INTERNAL_API_TOKEN is configured. `X-Request-Id`
+ * carries the originating request's correlation id (or a fresh one for
+ * background jobs) so a slow AI answer can be joined to the request that
+ * caused it across both services' logs. The user headers describe *who* the
+ * request is for, never *whether* it is allowed.
+ */
+function internalHeaders(
+  user?: { id: string; roles: string[] },
+  requestId?: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-request-id': requestId ?? randomRequestId(),
+  };
+  if (env.internalApiToken) headers['x-internal-token'] = env.internalApiToken;
+  if (user) {
+    headers['x-user-id'] = user.id;
+    headers['x-user-roles'] = user.roles.join(',');
+  }
+  return headers;
+}
+
+/** Correlation id for calls made outside any request context (queues, jobs). */
+function randomRequestId(): string {
+  return `job-${crypto.randomUUID()}`;
+}
 
 async function forward(req: Request, res: Response, targetPath: string): Promise<void> {
   const url = `${env.aiServiceUrl}${targetPath}`;
@@ -39,11 +71,7 @@ async function forward(req: Request, res: Response, targetPath: string): Promise
     }
     const upstream = await fetch(url, {
       method: req.method,
-      headers: {
-        'content-type': 'application/json',
-        'x-user-id': req.user!.id,
-        'x-user-roles': req.user!.roles.join(','),
-      },
+      headers: internalHeaders(req.user!, req.requestId),
       body,
       signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
@@ -120,6 +148,67 @@ aiRouter.post('/study-plan', authenticate, wrap(() => `/api/v1/ai/study-plan`));
 aiRouter.get('/recommendations', authenticate, wrap(() => `/api/v1/ai/recommendations`));
 
 /**
+ * Ask the AI service to transcribe an uploaded lecture video (PRD §9.3).
+ *
+ * Exported from the router alongside `triggerIngestion` for the same reason:
+ * the job worker must not import the routers. Resolves the media URL itself so
+ * the AI service never has to construct a backend-relative path it cannot
+ * fetch, and re-checks the row first — the lecture may have gained a
+ * transcript (or lost its video) since the job was queued.
+ */
+export async function requestTranscription(lectureId: string): Promise<void> {
+  const lecture = await queryOne<{
+    transcript: string | null;
+    video_url: string | null;
+  }>('SELECT transcript, video_url FROM lectures WHERE id = $1', [lectureId]);
+
+  if (!lecture) {
+    logger.warn('transcription_skipped', { lecture_id: lectureId, reason: 'lecture not found' });
+    return;
+  }
+  if (lecture.transcript?.trim()) {
+    logger.info('transcription_skipped', { lecture_id: lectureId, reason: 'already has transcript' });
+    return;
+  }
+  if (!lecture.video_url) {
+    logger.info('transcription_skipped', { lecture_id: lectureId, reason: 'no video' });
+    return;
+  }
+
+  const upstream = await fetch(`${env.aiServiceUrl}/api/v1/ai/internal/transcribe`, {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({
+      lecture_id: lectureId,
+      media_url: absoluteMediaUrl(lecture.video_url),
+    }),
+    // Speech-to-text on a real lecture takes minutes, not seconds.
+    signal: AbortSignal.timeout(600_000),
+  });
+
+  const text = await upstream.text();
+  if (!upstream.ok) {
+    // Throwing lets BullMQ retry with backoff rather than losing the lecture.
+    throw new Error(
+      `transcription failed: HTTP ${upstream.status} ${text.slice(0, 400)}`,
+    );
+  }
+  logger.info('transcription_done', { lecture_id: lectureId, response: text.slice(0, 500) });
+}
+
+/**
+ * Turn a stored `/uploads/...` path into an absolute URL.
+ *
+ * Absolute, object and data URLs pass through; anything else would resolve
+ * against the AI service's own origin and 404.
+ */
+function absoluteMediaUrl(storedUrl: string): string {
+  if (/^(https?:|data:|blob:)/i.test(storedUrl)) return storedUrl;
+  const path = storedUrl.startsWith('/') ? storedUrl : `/${storedUrl}`;
+  return `${env.publicApiUrl}${path}`;
+}
+
+/**
  * Fire-and-forget ingestion trigger used by lecture creation.
  * Exported from the router to avoid a circular dependency with ai.service.
  */
@@ -127,7 +216,7 @@ export async function triggerIngestion(lectureId: string): Promise<void> {
   try {
     const upstream = await fetch(`${env.aiServiceUrl}/api/v1/ai/internal/ingest`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: internalHeaders(),
       body: JSON.stringify({ lecture_id: lectureId }),
       signal: AbortSignal.timeout(30_000),
     });

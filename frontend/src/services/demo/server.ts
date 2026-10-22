@@ -555,19 +555,15 @@ route('POST', '/courses/:id/ratings', ({ state: s, params, body }) => {
   };
 });
 
-route('POST', '/courses/:id/enroll', ({ state: s, params }) => {
-  const user = requireUser(s);
-  const course = findCourse(s, params.id);
-  if (course.status !== 'approved') {
-    throw new HttpError(409, 'NOT_APPROVED', 'This course is not open for enrolment yet');
-  }
-  if (s.enrollments.some((e) => e.user_id === user.id && e.course_id === course.id)) {
-    throw new HttpError(409, 'ALREADY_ENROLLED', 'You are already enrolled in this course');
-  }
-
+/**
+ * Create the enrolment row for a learner, exactly once. Shared by the direct
+ * (free) route and the simulated checkout so both produce identical records.
+ */
+function enrolLearner(s: DemoState, userId: string, course: CourseDetail): boolean {
+  if (s.enrollments.some((e) => e.user_id === userId && e.course_id === course.id)) return false;
   s.enrollments.push({
     id: nextId('e'),
-    user_id: user.id,
+    user_id: userId,
     course_id: course.id,
     enrolled_at: new Date().toISOString(),
     progress_percent: '0',
@@ -579,8 +575,126 @@ route('POST', '/courses/:id/enroll', ({ state: s, params }) => {
     instructor_name: course.instructor_name ?? '',
   });
   course.enrollment_count = enrolmentCount(s, course.id);
-  notify(s, user.id, 'Enrolled', `You are now enrolled in ${course.title}.`);
+  notify(s, userId, 'Enrolled', `You are now enrolled in ${course.title}.`);
+  return true;
+}
+
+route('POST', '/courses/:id/enroll', ({ state: s, params }) => {
+  const user = requireUser(s);
+  const course = findCourse(s, params.id);
+  if (course.status !== 'approved') {
+    throw new HttpError(409, 'NOT_APPROVED', 'This course is not open for enrolment yet');
+  }
+  if (s.enrollments.some((e) => e.user_id === user.id && e.course_id === course.id)) {
+    throw new HttpError(409, 'ALREADY_ENROLLED', 'You are already enrolled in this course');
+  }
+  // Paid courses must go through checkout, mirroring the backend gate.
+  if (Number(course.price) > 0) {
+    const paid = s.payments.some(
+      (p) => p.user_id === user.id && p.course_id === course.id && p.status === 'success',
+    );
+    if (!paid) {
+      throw new HttpError(402, 'PAYMENT_REQUIRED', 'This is a paid course — complete checkout to enrol');
+    }
+  }
+
+  enrolLearner(s, user.id, course);
   return { id: nextId('e'), course_id: course.id };
+});
+
+// ---- Checkout (PRD §15 item 4) --------------------------------------------
+// Simulated: no gateway is contacted, but the order -> verify -> enrol
+// lifecycle matches the real API so the UI flow is identical either way.
+
+route('POST', '/courses/:id/payment/order', ({ state: s, params }) => {
+  const user = requireRole(s, 'student');
+  const course = findCourse(s, params.id);
+  if (course.status !== 'approved') {
+    throw new HttpError(409, 'NOT_APPROVED', 'This course is not open for enrolment yet');
+  }
+  const price = Number(course.price);
+  if (!(price > 0)) {
+    throw new HttpError(
+      400,
+      'VALIDATION_ERROR',
+      'This course is free — enrol directly instead of paying',
+    );
+  }
+  if (s.enrollments.some((e) => e.user_id === user.id && e.course_id === course.id)) {
+    throw new HttpError(409, 'ALREADY_ENROLLED', 'You are already enrolled in this course');
+  }
+
+  const prior = s.payments.find(
+    (p) => p.user_id === user.id && p.course_id === course.id && p.status === 'success',
+  );
+  if (prior) {
+    // Already paid but somehow not enrolled — heal it instead of recharging.
+    enrolLearner(s, user.id, course);
+    return { course_id: course.id, already_paid: true, prior_payment_id: prior.id };
+  }
+
+  const now = new Date().toISOString();
+  const orderId = `order_demo_${nextId('o')}`;
+  s.payments.push({
+    id: nextId('pay'),
+    user_id: user.id,
+    course_id: course.id,
+    amount: price,
+    currency: 'INR',
+    status: 'initiated',
+    razorpay_order_id: orderId,
+    razorpay_payment_id: null,
+    created_at: now,
+    updated_at: now,
+  });
+
+  return {
+    course_id: course.id,
+    amount: price,
+    currency: 'INR',
+    order_id: orderId,
+    key_id: 'rzp_test_demo',
+    course_title: course.title,
+    simulated: true,
+  };
+});
+
+route('POST', '/courses/:id/payment/verify', ({ state: s, params, body }) => {
+  const user = requireRole(s, 'student');
+  const course = findCourse(s, params.id);
+  const orderId = str(body.razorpay_order_id);
+  const payment = s.payments.find(
+    (p) => p.razorpay_order_id === orderId && p.user_id === user.id && p.course_id === course.id,
+  );
+  if (!payment) throw new HttpError(404, 'NOT_FOUND', 'No matching payment order for this course');
+
+  payment.status = 'success';
+  payment.razorpay_payment_id = str(body.razorpay_payment_id) || payment.razorpay_payment_id;
+  payment.updated_at = new Date().toISOString();
+
+  const created = enrolLearner(s, user.id, course);
+  return { course_id: course.id, paid: true, enrolled: true, already_enrolled: !created };
+});
+
+route('GET', '/courses/:id/payment/status', ({ state: s, params }) => {
+  const user = requireRole(s, 'student');
+  const course = findCourse(s, params.id);
+  const payment = [...s.payments]
+    .reverse()
+    .find((p) => p.user_id === user.id && p.course_id === course.id);
+  const enrolled = s.enrollments.some(
+    (e) => e.user_id === user.id && e.course_id === course.id,
+  );
+  return {
+    course_id: course.id,
+    price: Number(course.price),
+    free: Number(course.price) <= 0,
+    payments_configured: true,
+    enrolled,
+    payment: payment
+      ? { id: payment.id, status: payment.status, order_id: payment.razorpay_order_id }
+      : null,
+  };
 });
 
 route('POST', '/courses/:id/approve', ({ state: s, params, body }) => {
@@ -1407,10 +1521,11 @@ route('POST', '/ai/study-plan', ({ state: s }) => {
 route('GET', '/admin/analytics/overview', ({ state: s }) => {
   requireRole(s, 'admin');
   const approved = s.courses.filter((c) => c.status === 'approved');
-  const revenue = s.enrollments.reduce((sum, e) => {
-    const price = s.courses.find((c) => c.id === e.course_id)?.price ?? '0';
-    return sum + Number(price);
-  }, 0);
+  // Matches the backend KPI exactly: successful payments, not enrolment
+  // prices — so the demo cannot report revenue the platform never took.
+  const revenue = s.payments
+    .filter((p) => p.status === 'success')
+    .reduce((sum, p) => sum + p.amount, 0);
   const completed = s.enrollments.filter((e) => Number(e.progress_percent) >= 100).length;
 
   return {

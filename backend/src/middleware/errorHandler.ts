@@ -8,7 +8,12 @@ import { logger } from '../utils/logger';
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof AppError) {
     if (err.status >= 500) {
-      logger.error('request_failed', { path: req.path, code: err.code, message: err.message });
+      logger.error('request_failed', {
+        path: req.path,
+        code: err.code,
+        message: err.message,
+        request_id: req.requestId,
+      });
     }
     res.status(err.status).json(err.toJSON());
     return;
@@ -44,6 +49,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     path: req.path,
     message: err instanceof Error ? err.message : String(err),
     stack: err instanceof Error ? err.stack : undefined,
+    request_id: req.requestId,
   });
   res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
 }
@@ -66,6 +72,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
       status: res.statusCode,
       duration_ms: Math.round(durationMs * 100) / 100,
       user_id: req.user?.id,
+      request_id: req.requestId,
     });
   });
   next();

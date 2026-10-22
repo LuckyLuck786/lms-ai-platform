@@ -110,6 +110,24 @@ export interface CourseRatingRecord {
   updated_at: string;
 }
 
+/**
+ * A checkout attempt, mirroring the `payments` table. `razorpay_*` fields are
+ * simulated in demo mode — no gateway is contacted, but the record follows the
+ * same lifecycle (initiated -> success) so the UI exercises the real flow.
+ */
+export interface PaymentRecord {
+  id: string;
+  user_id: string;
+  course_id: string;
+  amount: number;
+  currency: 'INR';
+  status: 'initiated' | 'success' | 'failed' | 'refunded';
+  razorpay_order_id: string | null;
+  razorpay_payment_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DemoState {
   /** question_id -> correct option ids; never leaves the "server" side. */
   answerKey: Record<string, string[]>;
@@ -133,6 +151,8 @@ export interface DemoState {
   badges: Badge[];
   certificates: CertificateRecord[];
   ratings: CourseRatingRecord[];
+  /** Razorpay-shaped checkout records (PRD §15 item 4); never real money. */
+  payments: PaymentRecord[];
   sessions: ChatSessionRecord[];
   messages: ChatMessageRecord[];
 }
@@ -1183,6 +1203,10 @@ export function createDemoState(): DemoState {
     badges,
     certificates,
     ratings,
+    // Starts empty: every paid enrolment in the demo is genuinely created by
+    // the simulated checkout, so no seed row can contradict the gated enrol
+    // route (a "success" payment with no matching enrolment, or vice versa).
+    payments: [],
     sessions: [
       { id: 'cs-1', course_id: 'c-rag', user_id: 'u-student', mode: 'intermediate', created_at: iso(5) },
     ],

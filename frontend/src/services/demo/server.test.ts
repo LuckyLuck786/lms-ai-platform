@@ -241,7 +241,22 @@ describe('demo backend', () => {
       expect(approved.status).toBe('approved');
 
       await login('student2@vertexon.demo');
-      await call('POST', `/courses/${course.id}/enroll`, {});
+      // The freshly authored course is paid (39), so the free enrol route is
+      // refused until checkout clears — the strongest form of this check.
+      await expectError(
+        () => call('POST', `/courses/${course.id}/enroll`, {}),
+        402,
+        'PAYMENT_REQUIRED',
+      );
+      const order: any = (await call('POST', `/courses/${course.id}/payment/order`, {})).data;
+      expect(order.amount).toBe(39);
+      const purchased: any = (await call('POST', `/courses/${course.id}/payment/verify`, {
+        razorpay_order_id: order.order_id,
+        razorpay_payment_id: 'pay_new_course',
+        razorpay_signature: 'demo',
+      })).data;
+      expect(purchased.enrolled).toBe(true);
+
       const taken: any = (await call('GET', `/quizzes/${quiz.id}`)).data;
       const correctId = taken.questions[0].options[0].id;
       const attempt: any = await call('POST', `/quizzes/${quiz.id}/attempt`, {});
@@ -290,11 +305,44 @@ describe('demo backend', () => {
   });
 
   describe('enrolment', () => {
-    it('is idempotent and rejects enrolling twice', async () => {
+    it('gates a paid course behind checkout, then rejects enrolling twice', async () => {
       await login('student2@vertexon.demo');
-      const { data } = await call('POST', '/courses/c-dl/enroll', {});
-      expect(data.course_id).toBe('c-dl');
+
+      // c-dl is a paid course: the direct route must refuse it outright.
+      await expectError(() => call('POST', '/courses/c-dl/enroll', {}), 402, 'PAYMENT_REQUIRED');
+
+      const order: any = (await call('POST', '/courses/c-dl/payment/order', {})).data;
+      expect(order.simulated).toBe(true);
+      expect(order.amount).toBe(79);
+      expect(order.currency).toBe('INR');
+
+      const verified: any = (await call('POST', '/courses/c-dl/payment/verify', {
+        razorpay_order_id: order.order_id,
+        razorpay_payment_id: 'pay_cdl_1',
+        razorpay_signature: 'demo',
+      })).data;
+      expect(verified).toMatchObject({ paid: true, enrolled: true, already_enrolled: false });
+
+      // Now enrolled, so both a second checkout and a second enrol are refused.
+      await expectError(
+        () => call('POST', '/courses/c-dl/payment/order', {}),
+        409,
+        'ALREADY_ENROLLED',
+      );
       await expectError(() => call('POST', '/courses/c-dl/enroll', {}), 409, 'ALREADY_ENROLLED');
+    });
+
+    it('enrols directly in a free course and refuses to charge for it', async () => {
+      await login('student2@vertexon.demo');
+      const { data } = await call('POST', '/courses/c-sql/enroll', {});
+      expect(data.course_id).toBe('c-sql');
+      await expectError(() => call('POST', '/courses/c-sql/enroll', {}), 409, 'ALREADY_ENROLLED');
+      // A free course must never be routed through the gateway.
+      await expectError(
+        () => call('POST', '/courses/c-sql/payment/order', {}),
+        400,
+        'VALIDATION_ERROR',
+      );
     });
 
     it('refuses to enrol in a course still pending approval', async () => {

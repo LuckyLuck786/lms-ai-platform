@@ -35,7 +35,14 @@ async function audit(
   );
 }
 
-adminRouter.use(authenticate, requireRole('admin'));
+// Guard scoped to the /admin/* sub-path, never the whole router.
+//
+// This router is mounted at /api/v1 to match its /admin/... paths, so a
+// router-level `use(authenticate, requireRole('admin'))` would run for every
+// /api/v1 request that no earlier router answered: unknown paths would return
+// 403 instead of 404, and any router mounted after this one would be silently
+// shadowed for non-admins.
+adminRouter.use('/admin', authenticate, requireRole('admin'));
 
 // GET /admin/analytics/overview — platform-wide metrics (FR-AD3)
 adminRouter.get(

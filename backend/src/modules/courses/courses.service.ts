@@ -1,5 +1,6 @@
 import { query, queryOne } from '../../db/pool';
 import { triggerIngestion } from '../ai/ai.router';
+import { queueTranscription } from '../../jobs/queues';
 import { cacheDel, cacheGet, cacheSet } from '../../db/redis';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/errors';
 import { AuthUser, hasRole } from '../../middleware/auth';
@@ -430,6 +431,11 @@ export async function addLecture(user: AuthUser, moduleId: string, input: Create
   // Background ingestion: chunk + embed the transcript into pgvector (Phase 3).
   if (lecture && input.transcript) {
     void triggerIngestion((lecture as { id: string }).id);
+  } else if (lecture && input.video_url && !input.transcript) {
+    // Video with no transcript (PRD §9.3): without a speech-to-text pass the
+    // upload is unreachable by the AI tutor, so hand it to the transcription
+    // worker. It persists the transcript and then runs ingestion itself.
+    void queueTranscription({ lectureId: (lecture as { id: string }).id });
   }
   return lecture;
 }

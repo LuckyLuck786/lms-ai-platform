@@ -20,7 +20,8 @@ import {
 } from '../../utils/types';
 import CourseForum from '../../components/student/CourseForum';
 import { useI18n } from '../../utils/i18n';
-import { ClipboardCheck, GraduationCap, Play, Video } from '../../components/common/Icon';
+import { CheckoutCancelled, purchaseCourse } from '../../services/checkout';
+import { Check, ClipboardCheck, GraduationCap, Play, Video } from '../../components/common/Icon';
 
 export default function CourseDetail() {
   const { t } = useI18n();
@@ -50,6 +51,22 @@ export default function CourseDetail() {
       navigate('/');
     },
     onError: (err) => alert(apiErrorMessage(err)),
+  });
+
+  // Paid courses (PRD §15 item 4) go through checkout instead of enrolling
+  // directly; the backend refuses a free enrolment for anything with a price.
+  const buy = useMutation({
+    mutationFn: () => purchaseCourse(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['enrollments', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['course', id] });
+      navigate('/');
+    },
+    onError: (err) => {
+      // Dismissing the gateway is a normal choice, not a failure to report.
+      if (err instanceof CheckoutCancelled) return;
+      alert(apiErrorMessage(err));
+    },
   });
 
   // Ratings (FR-S3): the reviewer must be enrolled (or own/admin the course),
@@ -116,6 +133,7 @@ export default function CourseDetail() {
     mine: null,
   };
   const enrolled = !!myEnrollments.data?.items.some((e) => e.course_id === c.id);
+  const isPaid = Number(c.price) > 0;
   const canRate = enrolled || isOwner || !!user?.roles.includes('admin');
   const myRating = ratings.data?.mine?.rating ?? c.my_rating ?? 0;
   const reviewDraft = review || ratings.data?.mine?.comment || '';
@@ -159,14 +177,34 @@ export default function CourseDetail() {
             <p className="mt-3 max-w-2xl text-slate-600 dark:text-slate-300">{c.description}</p>
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-4 dark:border-white/[0.06]">
-              <div className="text-2xl font-semibold text-ink-950 dark:text-white">
-                {Number(c.price) > 0 ? `$${c.price}` : t('catalog.free')}
+              <div className="text-2xl font-semibold text-ink-950 nums dark:text-white">
+                {isPaid ? `₹${Number(c.price).toLocaleString()}` : t('catalog.free')}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {user?.roles.includes('student') && (
-                  <button className="btn-primary" disabled={enroll.isPending} onClick={() => enroll.mutate()}>
-                    {enroll.isPending ? t('catalog.enrolling') : t('course.enrollNow')}
-                  </button>
+                {user?.roles.includes('student') && !enrolled && !isOwner && (
+                  isPaid ? (
+                    <button
+                      className="btn-primary"
+                      disabled={buy.isPending}
+                      onClick={() => buy.mutate()}
+                    >
+                      {buy.isPending ? t('course.processingPayment') : t('course.buyNow')}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-primary"
+                      disabled={enroll.isPending}
+                      onClick={() => enroll.mutate()}
+                    >
+                      {enroll.isPending ? t('catalog.enrolling') : t('course.enrollNow')}
+                    </button>
+                  )
+                )}
+                {enrolled && (
+                  <span className="chip text-emerald-800 dark:text-emerald-400">
+                    <Check size={14} />
+                    {t('course.enrolled')}
+                  </span>
                 )}
                 {!user && <Link to="/login" className="btn-primary">{t('course.loginToEnroll')}</Link>}
                 {firstLectureId && (

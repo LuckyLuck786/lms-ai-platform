@@ -43,5 +43,20 @@ export const conflict = (message: string, field?: string) =>
 export const tooManyRequests = (message = 'Rate limit exceeded, please retry later') =>
   new AppError(429, 'RATE_LIMITED', message);
 
+/**
+ * The learner must pay (or finish paying) before this action is allowed.
+ * Separate from 403 so the SPA can route the user into checkout.
+ */
+export const paymentRequired = (message = 'Payment required to continue') =>
+  new AppError(402, 'PAYMENT_REQUIRED', message);
+
+/**
+ * The request was valid but a required first-party integration is not
+ * configured in this environment (e.g. no payment gateway keys). Distinct
+ * from 500 so clients can degrade gracefully instead of reporting a crash.
+ */
+export const serviceUnavailable = (message: string) =>
+  new AppError(503, 'SERVICE_UNAVAILABLE', message);
+
 export const internal = (message = 'Internal server error') =>
   new AppError(500, 'INTERNAL_ERROR', message);

@@ -5,6 +5,7 @@ import path from 'path';
 import { env } from './config/env';
 import { generalRateLimiter } from './middleware/rateLimit';
 import { errorHandler, notFoundHandler, requestLogger } from './middleware/errorHandler';
+import { requestIdMiddleware } from './middleware/requestId';
 import { authenticate } from './middleware/auth';
 import { authRouter } from './modules/auth/auth.router';
 import { coursesRouter } from './modules/courses/courses.router';
@@ -23,6 +24,7 @@ import { discussionsRouter } from './modules/discussions/discussions.router';
 import { announcementsRouter } from './modules/announcements/announcements.router';
 import { notificationsRouter } from './modules/notifications/notifications.router';
 import { adminRouter } from './modules/admin/admin.router';
+import { paymentsRouter } from './modules/payments/payments.router';
 import { storageDriver, streamStoredFile } from './utils/storage';
 
 export function createApp(): express.Express {
@@ -31,7 +33,20 @@ export function createApp(): express.Express {
   app.set('trust proxy', 1);
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
-  app.use(express.json({ limit: '2mb' }));
+  // Correlation id first, so body-parse failures and rate limits are logged
+  // against the same id as the rest of the request.
+  app.use(requestIdMiddleware);
+  // The Razorpay webhook authenticates itself with an HMAC over the exact
+  // bytes of the request body, so the parsed JSON cannot be re-serialised to
+  // verify it. Keep the raw buffer on the request for that one route.
+  app.use(
+    express.json({
+      limit: '2mb',
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
   app.use(requestLogger);
 
   // Health check (observability requirement)
@@ -98,6 +113,7 @@ export function createApp(): express.Express {
   app.use('/api/v1', discussionsRouter);
   app.use('/api/v1', announcementsRouter);
   app.use('/api/v1', notificationsRouter);
+  app.use('/api/v1', paymentsRouter);
   app.use('/api/v1', adminRouter);
   app.use('/api/v1', authenticate);
 

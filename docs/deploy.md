@@ -1,4 +1,20 @@
-# Deploying the full stack (Render + Neon + Upstash + Vercel)
+# Deploying the full stack
+
+**Which guide to follow.** The current production stack is **Google Cloud Run**
+(backend + AI service), **Cloud SQL** for Postgres 15 + pgvector, **Memorystore**
+for Redis, and **Vercel** for the frontend. The Cloud Run steps live in
+[`deploy-cloud-run.md`](deploy-cloud-run.md).
+
+The Render + Neon + Upstash route documented on this page is the earlier
+milestone's arrangement. It still works and is cheaper to stand up (all free
+tiers, no credit card), so it remains useful for a demo or a staging copy —
+but it is no longer what production runs, and `render.yaml` is not kept in
+sync with new settings such as `RAZORPAY_*`, `GCS_BUCKET` and
+`INTERNAL_API_TOKEN`.
+
+---
+
+# Legacy guide: Render + Neon + Upstash + Vercel
 
 The frontend is already live on Vercel (demo mode). This guide wires the
 real API behind it. Four steps; only step 1–2 need dashboard clicks.

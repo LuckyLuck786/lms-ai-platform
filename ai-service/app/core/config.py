@@ -50,8 +50,22 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-001"
     embedding_dimensions: int = 1536
 
+    # Speech-to-text (PRD §9.3). Groq's Whisper endpoint is OpenAI-compatible,
+    # so changing provider means changing the URL, key and model only.
+    stt_model: str = "whisper-large-v3-turbo"
+    # Provider upload cap. Raw video routinely exceeds it, which is why the
+    # transcribe route extracts an audio track with ffmpeg first.
+    stt_max_bytes: int = 25 * 1024 * 1024
+
     # Shared JWT secrets with the backend (service-to-service verification)
     jwt_secret: str = "dev-only-change-me-jwt-secret-32-chars-min"
+
+    # Shared secret the backend presents as `X-Internal-Token` on every call.
+    # When set, every /api/v1/ai route demands it — this service is internal
+    # and has no other caller, so an unauthenticated ingest or chat request
+    # would otherwise let anyone poison the RAG corpus or spend the LLM budget.
+    # Empty means "not enforced", which is the local-development default.
+    internal_api_token: str = ""
 
     cors_origin: str = "http://localhost:5173"
 

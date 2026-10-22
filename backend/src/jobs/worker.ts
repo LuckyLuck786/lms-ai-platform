@@ -3,6 +3,7 @@ import { query, queryOne } from '../db/pool';
 import { generateCertificatePdf } from '../utils/certificate';
 import { evaluateAllStreaks } from '../modules/gamification/gamification.service';
 import { EmailJob, queueConnection, queueEmail } from './queues';
+import { requestTranscription } from '../modules/ai/ai.router';
 import { recomputeTopicMasterySafe } from '../utils/mastery';
 import { closeEmailTransport, sendEmail } from '../services/email';
 import { logger } from '../utils/logger';
@@ -50,7 +51,7 @@ export function startWorkers(): { close: () => Promise<void> } {
       await query('UPDATE certificates SET certificate_url = $2 WHERE id = $1', [cert.id, filePath]);
       await query(
         'INSERT INTO notifications (user_id, title, body) VALUES ($1, $2, $3)',
-        [userId, 'Certificate issued! 🎓', `You completed “${course.title}”. Your certificate is ready.`],
+        [userId, 'Certificate issued', `You completed “${course.title}”. Your certificate is ready.`],
       );
 
       // Email the learner too — a certificate is worth an inbox notification.
@@ -99,11 +100,26 @@ export function startWorkers(): { close: () => Promise<void> } {
     { connection: queueConnection(), concurrency: 2 },
   );
 
+  // Video transcription (PRD §9.3): chunks and embeddings only exist once a
+  // transcript does, so this worker is what makes an uploaded lecture video
+  // reachable by the AI tutor's RAG index. Concurrency 1 — a Whisper call is
+  // minutes of provider time and must not fan out across a burst of uploads.
+  const transcriptionWorker = new Worker(
+    'transcription',
+    async (job: Job<{ lectureId: string }>) => {
+      const lectureId = job.data.lectureId;
+      await requestTranscription(lectureId);
+      return { lecture_id: lectureId };
+    },
+    { connection: queueConnection(), concurrency: 1 },
+  );
+
   for (const [name, w] of [
     ['certificates', certificateWorker],
     ['streaks', streakWorker],
     ['notifications', notificationWorker],
     ['mastery', masteryWorker],
+    ['transcription', transcriptionWorker],
   ] as const) {
     w.on('failed', (job, err) => {
       logger.error('job_failed', { queue: name, jobId: job?.id, error: err.message });
@@ -111,7 +127,7 @@ export function startWorkers(): { close: () => Promise<void> } {
   }
 
   logger.info('workers_started', {
-    queues: ['certificates', 'streaks', 'notifications', 'mastery'],
+    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription'],
   });
 
   return {
@@ -121,6 +137,7 @@ export function startWorkers(): { close: () => Promise<void> } {
         streakWorker.close(),
         notificationWorker.close(),
         masteryWorker.close(),
+        transcriptionWorker.close(),
         closeEmailTransport(),
       ]);
     },

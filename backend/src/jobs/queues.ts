@@ -19,6 +19,7 @@ let certificateQueue: Queue | null = null;
 let streakQueue: Queue | null = null;
 let notificationQueue: Queue | null = null;
 let masteryQueue: Queue | null = null;
+let transcriptionQueue: Queue | null = null;
 
 export interface EmailJob {
   kind: EmailKind;
@@ -98,6 +99,40 @@ export async function queueMasteryRecompute(payload: {
   }
 }
 
+function getTranscriptionQueue(): Queue {
+  transcriptionQueue ??= new Queue('transcription', { connection: queueConnection() });
+  return transcriptionQueue;
+}
+
+/**
+ * Ask the AI service to transcribe an uploaded lecture video (PRD §9.3).
+ *
+ * Ingestion is only reachable once a transcript exists, so this is the step
+ * that decides whether uploaded video is searchable by the AI tutor. Jobs are
+ * deduplicated by lecture: re-uploading a file must not start two Whisper
+ * calls for the same row.
+ */
+export async function queueTranscription(payload: {
+  lectureId: string;
+  mediaUrl?: string;
+}): Promise<void> {
+  try {
+    await getTranscriptionQueue().add('transcribe', payload, {
+      jobId: `transcribe:${payload.lectureId}`,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+    logger.info('transcription_queued', { lecture_id: payload.lectureId });
+  } catch (err) {
+    logger.warn('transcription_queue_failed', {
+      lecture_id: payload.lectureId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /** Registers the daily streak-evaluation cron (idempotent). */
 export async function registerStreakCron(): Promise<void> {
   try {
@@ -119,5 +154,6 @@ export async function closeQueues(): Promise<void> {
     streakQueue?.close(),
     notificationQueue?.close(),
     masteryQueue?.close(),
+    transcriptionQueue?.close(),
   ]);
 }

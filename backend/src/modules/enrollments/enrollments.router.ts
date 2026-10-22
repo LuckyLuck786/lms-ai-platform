@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { z } from 'zod';
 import { query, queryOne } from '../../db/pool';
-import { badRequest, forbidden, notFound, conflict } from '../../utils/errors';
+import { badRequest, forbidden, notFound, conflict, paymentRequired } from '../../utils/errors';
 import { createLectureSchema } from '../courses/courses.schemas';
 import * as coursesService from '../courses/courses.service';
 import { UPLOAD_TMP, ensureDir, persistFile, safeExtension } from '../../utils/storage';
@@ -103,8 +103,8 @@ enrollmentsRouter.post(
   requireRole('student'),
   wrap(async (req, res) => {
     enrollSchema.parse(req.body ?? {});
-    const course = await queryOne<{ id: string; status: string }>(
-      'SELECT id, status FROM courses WHERE id = $1',
+    const course = await queryOne<{ id: string; status: string; price: string }>(
+      'SELECT id, status, price FROM courses WHERE id = $1',
       [req.params.id],
     );
     if (!course) throw notFound('Course not found');
@@ -115,6 +115,19 @@ enrollmentsRouter.post(
       course.id,
     ]);
     if (existing) throw conflict('You are already enrolled in this course');
+
+    // Paid courses (PRD §15 item 4) cannot be entered for free: a successful
+    // payment for this learner + course is the price of admission. Free courses
+    // (price <= 0) skip this entirely, so the pre-payments behaviour is intact.
+    if (Number(course.price) > 0) {
+      const paid = await queryOne(
+        "SELECT id FROM payments WHERE user_id = $1 AND course_id = $2 AND status = 'success'",
+        [req.user!.id, course.id],
+      );
+      if (!paid) {
+        throw paymentRequired('This is a paid course — complete checkout to enrol');
+      }
+    }
 
     const enrollment = await queryOne(
       'INSERT INTO enrollments (user_id, course_id) VALUES ($1, $2) RETURNING *',

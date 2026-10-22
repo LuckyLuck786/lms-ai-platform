@@ -250,22 +250,59 @@ bash scripts/smoke-phase3.sh   # Phase 3: ingestion, RAG chat, AI generation (ne
 bash scripts/smoke-phase4.sh   # Phase 4: admin, forum, moderation, notifications
 ```
 
+## Payments (Razorpay checkout)
+
+Billing was PRD §15 (future work); paid courses now go through a real checkout
+rather than enrolling for free.
+
+- `POST /courses/:id/payment/order` — creates a Razorpay order for a paid
+  course and returns the public key the browser needs.
+- `POST /courses/:id/payment/verify` — verifies the checkout signature and is
+  what actually creates the enrolment, so confirmation is immediate.
+- `POST /courses/:id/payment/webhook` — Razorpay's server callback, verified
+  against the raw request body. Same `confirmPayment` path, so a learner who
+  closes the tab before `verify` still ends up enrolled exactly once.
+- `GET /courses/:id/payment/status` — price, enrolment and last payment state
+  for the course detail page.
+
+`POST /courses/:id/enroll` refuses anything with a price above zero unless a
+successful payment exists (402 `PAYMENT_REQUIRED`); free courses are untouched.
+The admin revenue KPI now sums real successful payments instead of always
+reading zero.
+
+With no `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` configured the checkout routes
+answer 503 and free courses keep working, so payments are optional per
+deployment. In demo mode the in-browser backend simulates the whole order →
+verify → enrol lifecycle, so the flow is explorable on a static host too.
+
 ## Cloud deployment
 
-The full stack deploys as two free Render web services (`render.yaml` blueprint)
-plus Neon (Postgres + pgvector) and Upstash (Redis), with the frontend on
-Vercel, step-by-step instructions, env vars and post-deploy RAG ingestion are
+The production stack is Google Cloud Run for both services plus Cloud SQL
+(Postgres 15 + pgvector) and Memorystore for Redis, with the frontend on
+Vercel. Step-by-step instructions, env vars and post-deploy RAG ingestion are
 in [docs/deploy.md](docs/deploy.md).
+
+`render.yaml` is a legacy alternative deployment from an earlier milestone
+(Render + Neon + Upstash). It is kept because it still describes a working
+free-tier arrangement, but the Cloud Run path is the one that is current —
+see [docs/deploy.md](docs/deploy.md) before choosing between them.
 
 ## Known deferrals
 
 Scoped out of the 4-week build and documented deliberately:
 
-- **Video transcription (PRD §9.3 Whisper job).** Every lecture ships with a
-  seeded transcript and there are no raw video uploads to transcribe, so an
-  STT worker would have no input. The ingestion queue (`triggerIngestion`,
-  `POST /api/v1/ai/internal/ingest`) is where a speech-to-text step plugs in
-  when real uploads arrive.
+- **Video transcription (PRD §9.3 Whisper job).** **Implemented** as the
+  `transcription` BullMQ queue. A lecture created with a video and no
+  transcript is queued; the worker calls `POST /api/v1/ai/internal/transcribe`,
+  which downloads the stored media, extracts an audio track with ffmpeg when
+  the file exceeds the provider's ~25 MB cap, runs Whisper, persists the
+  transcript, then runs RAG ingestion in the same call — so an uploaded video
+  becomes searchable by the AI tutor instead of staying invisible to it. The
+  route skips cleanly (and cheaply) when a transcript already exists, when
+  there is no video, when the media URL is not absolute, or when no
+  `GROQ_API_KEY` is set. What remains is an ops step: set `GROQ_API_KEY` in
+  production. ffmpeg is installed by the AI-service image; oversized media
+  without ffmpeg is reported with that reason rather than failing opaquely.
 - **Object storage.** Uploads go through `backend/src/utils/storage.ts`, which
   has two drivers: Google Cloud Storage when `GCS_BUCKET` is set (production),
   and local disk under `./uploads` otherwise. With GCS the API streams objects
@@ -277,9 +314,12 @@ Scoped out of the 4-week build and documented deliberately:
   Mailpit web inbox, otherwise messages are logged as structured dry-runs.
   Production just needs a real `smtp://` URL (Resend/Brevo/SES/Gmail app
   password), no code changes.
-- **Service-to-service auth.** The AI service trusts its caller today; a shared
-  secret header (Secret Manager) plus Cloud Run IAM for the backend is the
-  intended hardening step, so the internal ingest route cannot be called by
+- **Service-to-service auth.** Implemented: the backend presents
+  `X-Internal-Token` (from `INTERNAL_API_TOKEN`) on every AI-service call, and
+  the AI service rejects any `/api/v1/ai` request without it whenever a token
+  is configured. Setting the token in production is still an ops step, and
+  Cloud Run IAM (`--no-allow-unauthenticated`) remains the belt-and-braces
+  layer, so the internal ingest route cannot be called by
   third parties.
 - **Email delivery** needs provider credentials in production (`SMTP_URL`); the
   code path, templates and worker dispatch are complete.
