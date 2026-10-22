@@ -15,13 +15,18 @@ tags:
   - name: auth
   - name: courses
   - name: enrollments
+  - name: quizzes
+  - name: assignments
+  - name: gamification
+  - name: ai
+  - name: admin
 
 paths:
   /auth/register:
     post:
       tags: [auth]
       security: []
-      summary: Register a new user (default role: student)
+      summary: 'Register a new user (default role: student)'
       rateLimit: 10/min/IP
       requestBody:
         required: true
@@ -605,6 +610,74 @@ paths:
       responses:
         '200': { description: Plan }
         '404': { description: No enrolled courses }
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: List/search users — name substring or exact email (FR-AD2)
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 100 } }
+      responses:
+        '200': { description: 'Page of users: items, total, page, limit' }
+        '403': { description: Not an admin }
+
+  /admin/users/{id}/role:
+    put:
+      tags: [admin]
+      summary: Assign a role; revokes the user's refresh tokens (FR-AD4)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties: { role: { type: string, enum: [student, instructor, admin] } }
+      responses:
+        '200': { description: User id and new roles }
+
+  /admin/users/{id}/suspend:
+    put:
+      tags: [admin]
+      summary: Suspend or restore an account (FR-AD2)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties: { is_active: { type: boolean } }
+      responses:
+        '200': { description: Updated account state }
+
+  /admin/courses/pending:
+    get:
+      tags: [admin]
+      summary: Course approval queue (FR-AD1)
+      responses:
+        '200': { description: Pending courses }
+
+  /admin/analytics/overview:
+    get:
+      tags: [admin]
+      summary: Platform metrics — DAU, enrolments, completion rate, revenue (FR-AD3)
+      responses:
+        '200': { description: Metrics object }
+
+  /admin/moderation/flagged-posts:
+    get:
+      tags: [admin]
+      summary: Reported forum posts (FR-AD5)
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 100 } }
+      responses:
+        '200': { description: 'Page of flagged posts: items, total, page, limit' }
 
   /ai/recommendations:
     get:
