@@ -14,7 +14,7 @@ export const redis = new Redis(env.redisUrl, {
 
 redis.on('error', (err) => {
   // Avoid crashing the process on transient Redis outages.
-  // eslint-disable-next-line no-console
+   
   console.warn(JSON.stringify({ level: 'warn', msg: 'redis_error', error: err.message }));
 });
 

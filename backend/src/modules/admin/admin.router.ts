@@ -138,7 +138,7 @@ adminRouter.put(
   '/admin/users/:id/role',
   wrap(async (req, res) => {
     const input = roleSchema.parse(req.body);
-    const updated = await withTransaction(async (client) => {
+    await withTransaction(async (client) => {
       const user = await client.query('SELECT id, email FROM users WHERE id = $1', [req.params.id]);
       if (!user.rowCount) throw notFound('User not found');
       if (user.rows[0].id === req.user!.id) {

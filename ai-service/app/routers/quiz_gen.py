@@ -179,7 +179,8 @@ def review_quiz(quiz_id: str) -> dict:
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
     questions = query_all(
-        "SELECT id, question_text, question_type, order_index FROM quiz_questions WHERE quiz_id = %s ORDER BY order_index",
+        "SELECT id, question_text, question_type, order_index FROM quiz_questions"
+        " WHERE quiz_id = %s ORDER BY order_index",
         [quiz_id],
     )
     for q in questions:

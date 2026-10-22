@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../../middleware/auth';
 import { query, queryOne, withTransaction } from '../../db/pool';
-import { badRequest, forbidden, notFound } from '../../utils/errors';
+import { forbidden, notFound } from '../../utils/errors';
 import { touchStreak } from '../gamification/gamification.service';
 import { awardBadge } from '../../utils/badges';
 import { queueCertificate, queueMasteryRecompute } from '../../jobs/queues';

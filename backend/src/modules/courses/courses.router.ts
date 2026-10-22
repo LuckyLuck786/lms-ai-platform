@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, optionalAuthenticate, requireRole } from '../../middleware/auth';
-import { approveCourseSchema, catalogQuerySchema, createCourseSchema, createLectureSchema, createModuleSchema, rateCourseSchema, updateCourseSchema } from './courses.schemas';
+import { approveCourseSchema, catalogQuerySchema, createCourseSchema, createModuleSchema, rateCourseSchema, updateCourseSchema } from './courses.schemas';
 import * as coursesService from './courses.service';
 
 export const coursesRouter = Router();

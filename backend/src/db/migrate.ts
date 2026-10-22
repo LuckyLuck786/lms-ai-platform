@@ -30,7 +30,7 @@ async function migrate(): Promise<void> {
       if (applied.rowCount) continue;
 
       const sql = fs.readFileSync(path.join(dir, file), 'utf8');
-      // eslint-disable-next-line no-console
+       
       console.log(`Applying migration ${file}...`);
       await client.query('BEGIN');
       try {
@@ -42,7 +42,7 @@ async function migrate(): Promise<void> {
         throw err;
       }
     }
-    // eslint-disable-next-line no-console
+     
     console.log('Migrations up to date.');
 
     // Encrypt any email still stored in plaintext (migration 015). Done here,
@@ -61,7 +61,7 @@ async function migrate(): Promise<void> {
       ]);
     }
     if (pending.rowCount) {
-      // eslint-disable-next-line no-console
+       
       console.log(`Encrypted ${pending.rowCount} plaintext email(s).`);
     }
   } finally {
@@ -71,7 +71,7 @@ async function migrate(): Promise<void> {
 }
 
 migrate().catch((err) => {
-  // eslint-disable-next-line no-console
+   
   console.error('Migration failed:', err);
   process.exit(1);
 });

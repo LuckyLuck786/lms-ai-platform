@@ -1,0 +1,7 @@
+# Lint gate for CI (PRD §14.2). Correctness rules only: pyflakes (F) and
+# pycodestyle errors/warnings (E, W). Style modernisation is deliberately not
+# enforced — the service still runs on Python 3.9 locally.
+line-length = 120
+
+[lint]
+select = ["E", "F", "W"]

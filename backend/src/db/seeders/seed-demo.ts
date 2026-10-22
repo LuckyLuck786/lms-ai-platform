@@ -109,7 +109,7 @@ async function upsertEnrollment(userId: string, courseId: string, percent: numbe
 async function main(): Promise<void> {
   console.log('Seeding demo data…');
 
-  const admin = await upsertUser('Meera Admin', 'admin@vertexon.demo', 'admin');
+  await upsertUser('Meera Admin', 'admin@vertexon.demo', 'admin');
   const instructor = await upsertUser('Rohit Instructor', 'instructor@vertexon.demo', 'instructor');
   const ananya = await upsertUser('Ananya Student', 'student@vertexon.demo', 'student');
   const vikram = await upsertUser('Vikram Student', 'student2@vertexon.demo', 'student');

@@ -1,7 +1,7 @@
 import { query, queryOne } from '../../db/pool';
 import { queueIngestion, queueTranscription } from '../../jobs/queues';
 import { cacheDel, cacheGet, cacheSet } from '../../db/redis';
-import { badRequest, conflict, forbidden, notFound } from '../../utils/errors';
+import { badRequest, forbidden, notFound } from '../../utils/errors';
 import { AuthUser, hasRole } from '../../middleware/auth';
 import { completionRate, decorateLectureStat, LectureStatRow } from './analytics';
 import {

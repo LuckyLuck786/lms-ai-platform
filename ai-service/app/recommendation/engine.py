@@ -35,7 +35,6 @@ def build_recommendations(user_id: str) -> dict:
         """,
         [user_id],
     )
-    enrolled_ids = {e["id"] for e in enrollments}
     enrolled_categories = {e["category"] for e in enrollments if e["category"]}
 
     # Quiz performance per course → weak categories

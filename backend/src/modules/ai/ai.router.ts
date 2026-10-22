@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { aiChatRateLimiter } from '../../middleware/rateLimit';
 import { env } from '../../config/env';
-import { forbidden, internal, notFound } from '../../utils/errors';
+import { forbidden, notFound } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { queryOne } from '../../db/pool';
 import { queueMasteryRecompute } from '../../jobs/queues';
