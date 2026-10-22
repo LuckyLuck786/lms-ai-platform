@@ -1,3 +1,5 @@
+> **Superseded** by [`prd-compliance-report.md`](prd-compliance-report.md) (23 October 2026), which re-verifies every requirement against running code.
+
 # PRD Compliance Audit & Improvement Roadmap — Vertexon LMS-AI
 
 **Date:** 11 October 2026
