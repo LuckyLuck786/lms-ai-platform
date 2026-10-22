@@ -165,6 +165,10 @@ The AI service picks a provider automatically, in this order:
 | 2 | **Gemini** (`GEMINI_API_KEY`) | `gemini-2.5-flash` | free tier; also powers embeddings (`gemini-embedding-001`, 1536 dims) |
 | 3 | Anthropic (`ANTHROPIC_API_KEY`) | `claude-sonnet-4-5` | paid |
 
+Production runs on **Groq + Gemini** only, both on free tiers. PRD §13 names the
+Anthropic API as the LLM provider; that is a deliberate substitution for cost,
+and Anthropic stays wired as an optional third provider.
+
 Set any key in `.env` and chat/summaries/quiz-gen/flashcards switch from the
 offline demo mode to real LLM output, no code changes needed. Every provider
 call is wrapped so an outage degrades to the extractive fallback instead of

@@ -81,15 +81,6 @@ export const env = {
     refreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS ?? 7),
   },
 
-  s3: {
-    endpoint: process.env.S3_ENDPOINT ?? 'http://localhost:9000',
-    region: process.env.S3_REGION ?? 'us-east-1',
-    accessKey: process.env.S3_ACCESS_KEY ?? 'minioadmin',
-    secretKey: process.env.S3_SECRET_KEY ?? 'minioadmin',
-    bucket: process.env.S3_BUCKET ?? 'lms-media',
-    forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
-  },
-
   // Durable object storage for uploaded material. When GCS_BUCKET is set the
   // storage driver writes to Google Cloud Storage using the runtime service
   // account (Application Default Credentials) instead of the container disk,

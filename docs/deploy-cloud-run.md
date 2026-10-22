@@ -18,6 +18,65 @@ This is the stack production runs:
 
 ---
 
+## 0. Current production topology (as deployed, 23 October 2026)
+
+The generic steps below use placeholders. This is what is actually running in
+project `transitviz-67dus`, region `us-central1`:
+
+| Component | Resource | Notes |
+|---|---|---|
+| Backend API | Cloud Run service `backend` | `DISABLE_INLINE_WORKER=1` — serves HTTP only |
+| Background jobs | Cloud Run **worker pool** `lms-worker` | Same backend image, `node dist/jobs/worker-main.js`, 1 always-on instance. Runs certificates, email, mastery, transcription, streak cron (03:00 UTC) and recommendation cron (02:00 UTC) |
+| AI service | Cloud Run service `ai-service` | Public ingress; every `/api/v1/ai` route requires `X-Internal-Token` (see note) |
+| Postgres 15 + pgvector | Cloud SQL `lms-postgres` | Reached through the Cloud SQL connector socket. Authorized networks: the owner's IP only, for local development |
+| Redis | Memorystore `lms-redis` (Basic, 1 GB) | AUTH enabled, `maxmemory-policy=noeviction` (BullMQ requirement). Private IP, reached by Direct VPC egress |
+| Network | Direct VPC egress, network/subnet `default`, `private-ranges-only` | All three Cloud Run workloads |
+| Media | GCS bucket `lms-media-transitviz` | |
+| Images | Artifact Registry `lms-docker` | Tagged with the short git SHA |
+| Email | Gmail SMTP (`smtp.gmail.com:465`, app password) | Google Cloud has no email-sending product; ports 465/587 are open from Cloud Run |
+| Monitoring | Uptime checks `lms-backend-health`, `lms-ai-service-health` (5 min) + alert policy "LMS-AI service down" | Emails the owner |
+| Budget | "LMS-AI monthly", ₹6,000, alerts at 50/90/100 % | Measured before credits |
+
+Both Cloud Run URL forms resolve to the same service and are interchangeable:
+`backend-381741146904.us-central1.run.app` and `backend-mqkhx6y4xq-uc.a.run.app`.
+
+**Secrets** (Secret Manager, mounted with `--set-secrets` / `--update-secrets`):
+`database-url`, `redis-url`, `jwt-secret`, `jwt-refresh-secret`,
+`internal-api-token`, `smtp-url`, `groq-api-key`, `gemini-api-key`. No secret is
+set as a plain environment variable.
+
+**Why the AI service keeps public ingress.** Section 4 below describes
+`--no-allow-unauthenticated`, which would require the backend to mint Google
+identity tokens — code it does not have. `--ingress internal` would instead
+need all backend egress through the VPC plus Cloud NAT for SMTP. The deployed
+choice is public ingress with a mandatory 64-character `X-Internal-Token`,
+compared in constant time. An unauthenticated call returns 401.
+
+**Redeploying.**
+
+```bash
+SHA=$(git rev-parse --short HEAD)
+IMG=us-central1-docker.pkg.dev/transitviz-67dus/lms-docker
+gcloud builds submit backend    --tag "$IMG/backend:$SHA"
+gcloud builds submit ai-service --tag "$IMG/ai-service:$SHA"
+gcloud run deploy ai-service --image "$IMG/ai-service:$SHA" --region us-central1
+gcloud run deploy backend    --image "$IMG/backend:$SHA"    --region us-central1
+gcloud run worker-pools deploy lms-worker --image "$IMG/backend:$SHA" --region us-central1
+```
+
+Flags, secrets and networking persist on the services, so an image-only deploy
+keeps them.
+
+**Load-test baseline (NFR §6).** `infra/load/k6-core.js` against a
+no-traffic tagged revision with the general rate limit lifted, 100 virtual
+users for 60 s from Bangalore: 12,367 requests, 0 failures. Client-side p95
+was 315 ms, of which ~250 ms is round-trip to `us-central1` (the fastest
+request took 253 ms). Server-side p95 from the request logs was **11.9 ms**
+(p99 27.6 ms). The target is met by the API; the remaining latency is
+geography, which a region nearer the users (`asia-south1`) would remove.
+
+---
+
 ## 1. One-time infrastructure
 
 ```bash
@@ -171,7 +230,11 @@ backend and needs no server at all.
 
 - **No IaC.** Everything above is imperative; there is no Terraform/Pulumi
   definition, so the environment cannot be reproduced or diffed.
-- **No uptime or error alerting.** `/health` exists on both services but
-  nothing polls it and no log-based alert is configured.
+- ~~**No uptime or error alerting.**~~ Closed 23 Oct 2026 — uptime checks on
+  both `/health` endpoints with an email alert policy (§0). Error-rate alerting
+  on 5xx responses is still not configured.
+- **Rate limits are per instance.** `express-rate-limit` uses its in-memory
+  store, so with `maxScale=3` the effective ceiling is up to 3× the PRD §8.9
+  limit. A Redis-backed store would make it exact.
 - **Backups are unverified.** Cloud SQL takes automated backups, but a restore
   has never been rehearsed.

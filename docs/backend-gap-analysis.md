@@ -11,6 +11,39 @@ Cloud Run and Vercel URLs.
 
 ---
 
+## Status update — 23 October 2026
+
+The report below was written on 22 October with the platform offline. Billing
+was then re-enabled and the open items were worked through. **Where the body
+below reads as open, this table takes precedence.**
+
+| §  | Item | Outcome | Evidence |
+|---|---|---|---|
+| 0 | Platform offline (billing) | ✅ **Closed** — billing account reopened and linked | `/health` 200 on both services; live login, enrolments, notifications, streak and AI recommendations all 200 |
+| 1.1 | "Stale" Cloud Run hostnames | ❌ **Finding withdrawn** — `*-mqkhx6y4xq-uc.a.run.app` and `*-381741146904.us-central1.run.app` are two URL forms of the same service; both answer 200. The login "Network Error" was billing alone | `curl` against both forms |
+| 3.3 | Nightly recommendation recalculation | ✅ **Closed** — `POST /api/v1/ai/internal/recommendations/recompute` + BullMQ job scheduler at 02:00 UTC | `recommendation_cron_registered` in worker logs; `tests/recommendations.test.ts`, `tests/test_recommendations_job.py` |
+| 3.4 | S3 driver | ✅ **Closed by removal** — the unused `env.s3` config block is deleted; GCS is the production driver | `backend/src/config/env.ts` |
+| 3.5 | Production email | ✅ **Closed** — Gmail SMTP via app password, stored as secret `smtp-url` | `POST /admin/email/test` → `{"sent":1}`; `GET /admin/email/status` → `verified: true` |
+| 3.6 | Pagination | ✅ **Closed** — `page`/`limit` + `total` on admin users, flagged posts, audit logs, notifications; defaults equal the old caps. Notification `unread` now counts all rows, not the first 50 | `utils/pagination.ts`, `tests/pagination.test.ts`; live `GET /admin/users?limit=2` → `total: 6` |
+| 3.8 | Load-test evidence | ✅ **Closed** — server-side p95 **11.9 ms** at 100 VUs (target 300 ms) | `infra/load/k6-core.js`; [`deploy-cloud-run.md` §0](deploy-cloud-run.md) |
+| 3.9 | Uptime alerting | ✅ **Closed** — 5-minute uptime checks on both services, email alert policy | Cloud Monitoring |
+| 3.10 | Request-ID propagation | ✅ **Closed** — ai-service honours, validates and echoes `X-Request-Id` and logs it per request | `tests/test_recommendations_job.py` |
+| 4.1 #2 | Redis `MISCONF` / no AUTH | ✅ **Closed** — moved from the public VM to Memorystore `lms-redis` with AUTH and `noeviction`; VM stopped (not deleted) | worker logs clean |
+| 4.1 #3 | Workers dying at scale-to-zero | ✅ **Closed** — Cloud Run worker pool `lms-worker`, 1 always-on instance; API runs with `DISABLE_INLINE_WORKER=1` | `worker_process_ready` in logs |
+| 4.2 #7 / 5 D | Secrets as plain env vars | ✅ **Closed** — 8 secrets in Secret Manager; none left as plain env | `gcloud run services describe` |
+| 5 A | Cloud SQL open to `0.0.0.0/0` | ✅ **Closed** — services use the Cloud SQL connector socket; authorized networks narrowed to the owner's IP | `gcloud sql instances describe lms-postgres` |
+| 5 C | AI service bypassable | ✅ **Closed** — `INTERNAL_API_TOKEN` now set in production (it was unset, so the guard was off); unauthenticated calls return 401 | live probe |
+| — | Budget guard | ➕ **Added** — ₹6,000/month budget, alerts at 50/90/100 % before credits | Cloud Billing |
+
+**Still open:** §3.7 Playwright E2E + CI deploy stage, §3.11 PII column
+encryption, §3.12 integration tests against real Postgres/Redis, §4.2 #8 CDN
+for video, per-instance rate-limit store ([`deploy-cloud-run.md` §8](deploy-cloud-run.md)).
+
+Tests after these changes: backend **105 passed / 13 files**, ai-service
+**70 passed, 1 skipped**, backend typecheck clean.
+
+---
+
 ## 0. Headline — the platform is feature-complete and currently offline
 
 Two findings dominate everything below.
