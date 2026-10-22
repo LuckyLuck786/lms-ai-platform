@@ -28,6 +28,7 @@ vi.mock('../src/jobs/queues', () => ({
   queueEmail: vi.fn(),
   queueMasteryRecompute: vi.fn(),
   queueTranscription: vi.fn(),
+  queueIngestion: vi.fn(),
 }));
 
 import { requestRecommendationRecompute } from '../src/modules/ai/ai.router';

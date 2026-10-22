@@ -57,6 +57,20 @@ describe('schema', () => {
   });
 });
 
+describe('indexing (PRD §7.3)', () => {
+  it('has a B-tree index leading with every foreign-key column', async () => {
+    const unindexed = await query<{ fk: string }>(
+      `SELECT c.conrelid::regclass || '.' || a.attname AS fk
+       FROM pg_constraint c
+       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+       WHERE c.contype = 'f'
+         AND NOT EXISTS (SELECT 1 FROM pg_index i
+                         WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1])`,
+    );
+    expect(unindexed.map((r) => r.fk)).toEqual([]);
+  });
+});
+
 describe('PII encryption at rest (NFR §6)', () => {
   it('stores every email as ciphertext with a blind index', async () => {
     const rows = await query<{ email: string; email_hash: string | null }>(
@@ -150,6 +164,16 @@ describe('learning flow', () => {
     expect(mine.body.items.map((e: { course_id?: string; id: string }) => e.course_id ?? e.id)).toContain(
       free!.id,
     );
+  });
+});
+
+describe('PRD §8.6 paths', () => {
+  it('serves GET /recommendations/me behind auth', async () => {
+    expect((await api().get('/api/v1/recommendations/me')).status).toBe(401);
+    const token = await login('student@vertexon.demo');
+    const res = await api().get('/api/v1/recommendations/me').set('authorization', `Bearer ${token}`);
+    // No AI service in this suite: 502 proves the route is mounted and proxies.
+    expect(res.status).toBe(502);
   });
 });
 

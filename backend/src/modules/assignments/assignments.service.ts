@@ -4,6 +4,7 @@ import { query, queryOne } from '../../db/pool';
 import { forbidden, notFound, badRequest, conflict } from '../../utils/errors';
 import { AuthUser } from '../../middleware/auth';
 import { CreateAssignmentInput } from './assignments.schemas';
+import { cacheDel } from '../../db/redis';
 
 /**
  * Assignments (FR-S6, FR-I3): creation, file submission before deadline,
@@ -34,6 +35,7 @@ export async function createAssignment(user: AuthUser, input: CreateAssignmentIn
       input.due_date ?? null,
     ],
   );
+  await cacheDel('catalog:course:*'); // course pages list assignments
   return assignment;
 }
 

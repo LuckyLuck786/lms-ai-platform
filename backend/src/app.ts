@@ -19,7 +19,7 @@ import { attemptsRouter, quizzesRouter } from './modules/quizzes/quizzes.router'
 import { assignmentsRouter } from './modules/assignments/assignments.router';
 import { gamificationRouter } from './modules/gamification/gamification.router';
 import { masteryRouter } from './modules/mastery/mastery.router';
-import { aiRouter } from './modules/ai/ai.router';
+import { aiRouter, recommendationsRouter } from './modules/ai/ai.router';
 import { discussionsRouter } from './modules/discussions/discussions.router';
 import { announcementsRouter } from './modules/announcements/announcements.router';
 import { notificationsRouter } from './modules/notifications/notifications.router';
@@ -110,6 +110,7 @@ export function createApp(): express.Express {
   app.use('/api/v1', gamificationRouter);
   app.use('/api/v1', masteryRouter);
   app.use('/api/v1/ai', aiRouter);
+  app.use('/api/v1', recommendationsRouter);
   app.use('/api/v1', discussionsRouter);
   app.use('/api/v1', announcementsRouter);
   app.use('/api/v1', notificationsRouter);

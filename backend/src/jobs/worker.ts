@@ -1,9 +1,13 @@
 import { Worker, Job } from 'bullmq';
 import { query, queryOne } from '../db/pool';
-import { generateCertificatePdf } from '../utils/certificate';
+import { buildCertificatePdf } from '../utils/certificate';
 import { evaluateAllStreaks } from '../modules/gamification/gamification.service';
 import { EmailJob, queueConnection, queueEmail } from './queues';
-import { requestRecommendationRecompute, requestTranscription } from '../modules/ai/ai.router';
+import {
+  requestIngestion,
+  requestRecommendationRecompute,
+  requestTranscription,
+} from '../modules/ai/ai.router';
 import { recomputeTopicMasterySafe } from '../utils/mastery';
 import { closeEmailTransport, sendEmail } from '../services/email';
 import { logger } from '../utils/logger';
@@ -40,7 +44,11 @@ export function startWorkers(): { close: () => Promise<void> } {
       if (!user || !course) return { skipped: true };
       const student = user; // named for readability in the email step below
 
-      const filePath = await generateCertificatePdf({
+      // Render once to prove the PDF builds for this record, but do not keep
+      // it: the download route renders on demand from the database, so the
+      // certificate survives any redeploy and is served by any API instance.
+      // (The worker's own disk is not reachable from the API.)
+      await buildCertificatePdf({
         certificateId: cert.id,
         studentName: user.full_name,
         courseTitle: course.title,
@@ -48,8 +56,9 @@ export function startWorkers(): { close: () => Promise<void> } {
         instructorName: course.instructor_name ?? undefined,
         verifyBaseUrl: env.smtp.appUrl,
       });
+      const downloadPath = `/api/v1/certificates/${cert.id}/download`;
 
-      await query('UPDATE certificates SET certificate_url = $2 WHERE id = $1', [cert.id, filePath]);
+      await query('UPDATE certificates SET certificate_url = $2 WHERE id = $1', [cert.id, downloadPath]);
       await query(
         'INSERT INTO notifications (user_id, title, body) VALUES ($1, $2, $3)',
         [userId, 'Certificate issued', `You completed “${course.title}”. Your certificate is ready.`],
@@ -67,7 +76,7 @@ export function startWorkers(): { close: () => Promise<void> } {
       });
 
       logger.info('certificate_generated', { certificate_id: cert.id, user_id: userId });
-      return { certificateId: cert.id, filePath };
+      return { certificateId: cert.id, downloadPath };
     },
     { connection: queueConnection(), concurrency: 2 },
   );
@@ -123,6 +132,16 @@ export function startWorkers(): { close: () => Promise<void> } {
     { connection: queueConnection(), concurrency: 1 },
   );
 
+  // RAG ingestion (PRD §9.3): chunk + embed new lecture material.
+  const ingestionWorker = new Worker(
+    'ingestion',
+    async (job: Job<{ lectureId: string }>) => {
+      await requestIngestion(job.data.lectureId);
+      return { lecture_id: job.data.lectureId };
+    },
+    { connection: queueConnection(), concurrency: 2 },
+  );
+
   for (const [name, w] of [
     ['certificates', certificateWorker],
     ['streaks', streakWorker],
@@ -130,6 +149,7 @@ export function startWorkers(): { close: () => Promise<void> } {
     ['mastery', masteryWorker],
     ['transcription', transcriptionWorker],
     ['recommendations', recommendationWorker],
+    ['ingestion', ingestionWorker],
   ] as const) {
     w.on('failed', (job, err) => {
       logger.error('job_failed', { queue: name, jobId: job?.id, error: err.message });
@@ -137,7 +157,7 @@ export function startWorkers(): { close: () => Promise<void> } {
   }
 
   logger.info('workers_started', {
-    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription', 'recommendations'],
+    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription', 'recommendations', 'ingestion'],
   });
 
   return {
@@ -149,6 +169,7 @@ export function startWorkers(): { close: () => Promise<void> } {
         masteryWorker.close(),
         transcriptionWorker.close(),
         recommendationWorker.close(),
+        ingestionWorker.close(),
         closeEmailTransport(),
       ]);
     },

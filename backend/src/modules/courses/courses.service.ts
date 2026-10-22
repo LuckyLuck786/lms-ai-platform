@@ -1,6 +1,5 @@
 import { query, queryOne } from '../../db/pool';
-import { triggerIngestion } from '../ai/ai.router';
-import { queueTranscription } from '../../jobs/queues';
+import { queueIngestion, queueTranscription } from '../../jobs/queues';
 import { cacheDel, cacheGet, cacheSet } from '../../db/redis';
 import { badRequest, conflict, forbidden, notFound } from '../../utils/errors';
 import { AuthUser, hasRole } from '../../middleware/auth';
@@ -98,8 +97,19 @@ export async function listCatalog(q: CatalogQuery, user?: AuthUser) {
   return payload;
 }
 
-export async function getCourseDetail(id: string, user?: AuthUser) {
-  const course = await queryOne(
+const COURSE_CACHE_TTL = 300; // 5 minutes, same as the catalog (PRD §6, §9.4)
+// Lives under catalog:* so every existing catalog invalidation also clears it.
+const courseCacheKey = (id: string) => `catalog:course:${id}`;
+
+interface CourseStructure {
+  course: Record<string, unknown> & { status: string; instructor_id: string };
+  modules: Record<string, unknown>[];
+  assignments: Record<string, unknown>[];
+}
+
+/** Course row + modules, lectures, quizzes and assignments — no per-user data. */
+async function loadCourseStructure(id: string, includeDrafts: boolean): Promise<CourseStructure | null> {
+  const course = await queryOne<CourseStructure['course']>(
     `SELECT c.*, u.full_name AS instructor_name,
             COALESCE(r.avg_rating, 0)::float AS avg_rating,
             COALESCE(r.rating_count, 0)::int AS rating_count
@@ -112,12 +122,7 @@ export async function getCourseDetail(id: string, user?: AuthUser) {
      WHERE c.id = $1`,
     [id],
   );
-  if (!course) throw notFound('Course not found');
-
-  const isOwner = user?.id === (course as { instructor_id: string }).instructor_id;
-  const visible =
-    (course as { status: string }).status === 'approved' || isOwner || hasRole(user, 'admin');
-  if (!visible) throw notFound('Course not found');
+  if (!course) return null;
 
   const modules = await query(
     `SELECT id, title, order_index FROM modules WHERE course_id = $1 ORDER BY order_index, title`,
@@ -133,16 +138,52 @@ export async function getCourseDetail(id: string, user?: AuthUser) {
     : [];
   const quizzes = moduleIds.length
     ? await query(
-        `SELECT id, module_id, title,
+        `SELECT id, module_id, title, status, is_ai_generated,
                 (SELECT count(*)::int FROM quiz_questions WHERE quiz_id = quizzes.id) AS question_count
-         FROM quizzes WHERE module_id = ANY($1) ORDER BY title`,
-        [moduleIds],
+         FROM quizzes
+         WHERE module_id = ANY($1) AND (status = 'published' OR $2::boolean)
+         ORDER BY title`,
+        // Unreviewed AI drafts (FR-A5) are visible only to the course owner and admins.
+        [moduleIds, includeDrafts],
       )
     : [];
   const assignments = await query(
     `SELECT id, title, instructions, due_date FROM assignments WHERE course_id = $1 ORDER BY due_date NULLS LAST`,
     [id],
   );
+
+  return {
+    course,
+    assignments,
+    modules: modules.map((m) => ({
+      ...(m as object),
+      lectures: lectures.filter((l) => (l as { module_id: string }).module_id === (m as { id: string }).id),
+      quizzes: quizzes.filter((q) => (q as { module_id: string }).module_id === (m as { id: string }).id),
+    })),
+  };
+}
+
+export async function getCourseDetail(id: string, user?: AuthUser) {
+  const isAdmin = hasRole(user, 'admin');
+
+  // Learners and visitors share one cached copy of an approved course. The
+  // owner and admins always read live, because they also see drafts.
+  let structure = await cacheGet<CourseStructure>(courseCacheKey(id));
+  if (structure && (isAdmin || structure.course.instructor_id === user?.id)) structure = null;
+  if (!structure) {
+    const peek = await queryOne<{ instructor_id: string }>('SELECT instructor_id FROM courses WHERE id = $1', [id]);
+    if (!peek) throw notFound('Course not found');
+    const privileged = isAdmin || peek.instructor_id === user?.id;
+    structure = await loadCourseStructure(id, privileged);
+    if (!structure) throw notFound('Course not found');
+    if (!privileged && structure.course.status === 'approved') {
+      await cacheSet(courseCacheKey(id), structure, COURSE_CACHE_TTL);
+    }
+  }
+
+  const isOwner = user?.id === structure.course.instructor_id;
+  const visible = structure.course.status === 'approved' || isOwner || isAdmin;
+  if (!visible) throw notFound('Course not found');
 
   // The learner's own rating (FR-S3) so the detail page can pre-fill the widget.
   const myRating = user
@@ -153,15 +194,11 @@ export async function getCourseDetail(id: string, user?: AuthUser) {
     : null;
 
   return {
-    ...course,
+    ...structure.course,
     my_rating: myRating?.rating ?? null,
     my_review: myRating?.comment ?? null,
-    assignments,
-    modules: modules.map((m) => ({
-      ...(m as object),
-      lectures: lectures.filter((l) => (l as { module_id: string }).module_id === (m as { id: string }).id),
-      quizzes: quizzes.filter((q) => (q as { module_id: string }).module_id === (m as { id: string }).id),
-    })),
+    assignments: structure.assignments,
+    modules: structure.modules,
   };
 }
 
@@ -430,7 +467,7 @@ export async function addLecture(user: AuthUser, moduleId: string, input: Create
 
   // Background ingestion: chunk + embed the transcript into pgvector (Phase 3).
   if (lecture && input.transcript) {
-    void triggerIngestion((lecture as { id: string }).id);
+    void queueIngestion({ lectureId: (lecture as { id: string }).id });
   } else if (lecture && input.video_url && !input.transcript) {
     // Video with no transcript (PRD §9.3): without a speech-to-text pass the
     // upload is unreachable by the AI tutor, so hand it to the transcription

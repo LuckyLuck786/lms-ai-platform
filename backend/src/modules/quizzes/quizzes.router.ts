@@ -22,6 +22,16 @@ quizzesRouter.post(
   }),
 );
 
+// ---- Instructor: approve an AI-generated draft (FR-I4, FR-A5) -------------
+quizzesRouter.put(
+  '/:id/approve',
+  authenticate,
+  requireRole('instructor', 'admin'),
+  wrap(async (req, res) => {
+    res.json(await quizzesService.approveQuiz(req.user!, req.params.id));
+  }),
+);
+
 // ---- Shared ---------------------------------------------------------------
 quizzesRouter.get(
   '/:id',

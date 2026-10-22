@@ -135,8 +135,8 @@ def generate_quiz(
 
     quiz = execute(
         """
-        INSERT INTO quizzes (module_id, title, is_ai_generated, generated_from_lecture_id)
-        VALUES (%s, %s, TRUE, %s) RETURNING *
+        INSERT INTO quizzes (module_id, title, is_ai_generated, generated_from_lecture_id, status)
+        VALUES (%s, %s, TRUE, %s, 'draft') RETURNING *
         """,
         [lecture["module_id"], f"AI draft: {lecture['title']}", lecture_id],
     )

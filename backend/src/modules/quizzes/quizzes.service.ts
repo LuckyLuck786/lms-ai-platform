@@ -52,6 +52,7 @@ export async function createQuiz(user: AuthUser, input: CreateQuizInput) {
   });
 
   await cacheDel('quizzes:*');
+  await cacheDel('catalog:course:*'); // course pages list quizzes
   return quiz;
 }
 
@@ -85,7 +86,10 @@ async function getQuizWithAnswers(quizId: string) {
  */
 export async function getQuiz(quizId: string, user: AuthUser) {
   const { quiz, questions } = await getQuizWithAnswers(quizId);
-  const staff = user.roles.includes('instructor') || user.roles.includes('admin');
+  // Answers go to the course's own instructor and admins only — an instructor
+  // of another course is just another learner here (PRD §11 ownership rule).
+  const staff = await canManageQuiz(user, quizId);
+  if ((quiz as { status?: string }).status === 'draft' && !staff) throw notFound('Quiz not found');
   const safe = questions.map((q) => ({
     ...(q as object),
     options: ((q as { options: { id: string; question_id: string; option_text: string; is_correct: boolean }[] })
@@ -98,13 +102,44 @@ export async function getQuiz(quizId: string, user: AuthUser) {
   return { ...quiz, questions: safe, show_answers: staff };
 }
 
-export async function listQuizzesForModule(moduleId: string) {
+export async function listQuizzesForModule(moduleId: string, includeDrafts = false) {
   return query(
-    `SELECT q.id, q.title, q.module_id, q.is_ai_generated,
+    `SELECT q.id, q.title, q.module_id, q.is_ai_generated, q.status,
             (SELECT count(*)::int FROM quiz_questions WHERE quiz_id = q.id) AS question_count
-     FROM quizzes q WHERE q.module_id = $1 ORDER BY q.title`,
-    [moduleId],
+     FROM quizzes q WHERE q.module_id = $1 AND (q.status = 'published' OR $2::boolean)
+     ORDER BY q.title`,
+    [moduleId, includeDrafts],
   );
+}
+
+/** True for admins and the instructor who owns the quiz's course. */
+export async function canManageQuiz(user: AuthUser, quizId: string): Promise<boolean> {
+  if (user.roles.includes('admin')) return true;
+  if (!user.roles.includes('instructor')) return false;
+  const row = await queryOne<{ instructor_id: string }>(
+    `SELECT c.instructor_id FROM quizzes q
+     JOIN modules m ON m.id = q.module_id
+     JOIN courses c ON c.id = m.course_id
+     WHERE q.id = $1`,
+    [quizId],
+  );
+  return row?.instructor_id === user.id;
+}
+
+/**
+ * PUT /quizzes/:id/approve — publish an AI-generated draft after review
+ * (FR-I4). Owner or admin only; approving a published quiz is a no-op.
+ */
+export async function approveQuiz(user: AuthUser, quizId: string) {
+  const quiz = await queryOne<{ id: string }>('SELECT id FROM quizzes WHERE id = $1', [quizId]);
+  if (!quiz) throw notFound('Quiz not found');
+  if (!(await canManageQuiz(user, quizId))) throw forbidden('You do not own this course');
+  const approved = await queryOne(
+    "UPDATE quizzes SET status = 'published' WHERE id = $1 RETURNING id, title, status, is_ai_generated",
+    [quizId],
+  );
+  await cacheDel('catalog:course:*'); // the quiz now appears on the course page
+  return approved;
 }
 
 /** Students may only attempt quizzes in courses they're enrolled in. */
@@ -115,7 +150,7 @@ async function requireEnrolledForQuiz(userId: string, quizId: string) {
      JOIN modules m ON m.id = q.module_id
      JOIN courses c ON c.id = m.course_id
      JOIN enrollments e ON e.course_id = c.id AND e.user_id = $1
-     WHERE q.id = $2`,
+     WHERE q.id = $2 AND q.status = 'published'`,
     [userId, quizId],
   );
   if (!row) throw forbidden('You are not enrolled in this course');

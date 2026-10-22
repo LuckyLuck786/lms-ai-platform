@@ -353,10 +353,20 @@ paths:
   /quizzes/{id}:
     get:
       tags: [quizzes]
-      summary: Quiz with questions — answer keys only for staff
+      summary: Quiz with questions — answer keys only for the course's instructor and admins
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Quiz }
+        '404': { description: Not found, or an unreviewed AI draft requested by a learner }
+
+  /quizzes/{id}/approve:
+    put:
+      tags: [quizzes]
+      summary: Publish an AI-generated draft after review (FR-I4, FR-A5) — course owner or admin
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Quiz with status "published" }
+        '403': { description: Not the course owner }
 
   /quizzes/{id}/attempt:
     post:
@@ -600,6 +610,13 @@ paths:
     get:
       tags: [ai]
       summary: Personalized course recommendations — quiz performance + embedding similarity (FR-S10)
+      responses:
+        '200': { description: Ranked recommendations with reasons }
+
+  /recommendations/me:
+    get:
+      tags: [ai]
+      summary: Same as /ai/recommendations, at the path PRD §8.6 specifies
       responses:
         '200': { description: Ranked recommendations with reasons }
 

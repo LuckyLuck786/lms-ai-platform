@@ -8,6 +8,7 @@ import { badRequest, forbidden, notFound, conflict, paymentRequired } from '../.
 import { createLectureSchema } from '../courses/courses.schemas';
 import * as coursesService from '../courses/courses.service';
 import { UPLOAD_TMP, ensureDir, persistFile, safeExtension } from '../../utils/storage';
+import { cacheDel } from '../../db/redis';
 
 export const modulesRouter = Router();
 
@@ -214,6 +215,7 @@ lecturesRouter.post(
       'UPDATE lectures SET resource_urls = $2 WHERE id = $1 RETURNING id, resource_urls',
       [lecture.id, merged],
     );
+    await cacheDel('catalog:course:*'); // course pages list lecture resources
 
     res.status(201).json({
       ...updated,

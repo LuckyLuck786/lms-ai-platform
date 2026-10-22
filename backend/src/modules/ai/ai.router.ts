@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, requireRole } from '../../middleware/auth';
 import { aiChatRateLimiter } from '../../middleware/rateLimit';
 import { env } from '../../config/env';
-import { internal } from '../../utils/errors';
+import { forbidden, internal, notFound } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { queryOne } from '../../db/pool';
 import { queueMasteryRecompute } from '../../jobs/queues';
@@ -138,19 +138,46 @@ aiRouter.put(
 
 // Content generation + recommendations
 aiRouter.post('/lectures/:id/summarize', authenticate, wrap((req) => `/api/v1/ai/lectures/${req.params.id}/summarize`));
+// Quiz drafts are written into the course, so only its instructor or an admin
+// may generate one (PRD §11: students cannot create AI quizzes).
 aiRouter.post(
   '/lectures/:id/generate-quiz',
   authenticate,
-  wrap((req) => `/api/v1/ai/lectures/${req.params.id}/generate-quiz`),
+  requireRole('instructor', 'admin'),
+  wrap(async (req) => {
+    const lecture = await queryOne<{ instructor_id: string }>(
+      `SELECT c.instructor_id FROM lectures l
+       JOIN modules m ON m.id = l.module_id
+       JOIN courses c ON c.id = m.course_id
+       WHERE l.id = $1`,
+      [req.params.id],
+    );
+    if (!lecture) throw notFound('Lecture not found');
+    if (lecture.instructor_id !== req.user!.id && !req.user!.roles.includes('admin')) {
+      throw forbidden('You do not own this course');
+    }
+    return `/api/v1/ai/lectures/${req.params.id}/generate-quiz`;
+  }),
 );
 aiRouter.post('/modules/:id/flashcards', authenticate, wrap((req) => `/api/v1/ai/modules/${req.params.id}/flashcards`));
 aiRouter.post('/study-plan', authenticate, wrap(() => `/api/v1/ai/study-plan`));
 aiRouter.get('/recommendations', authenticate, wrap(() => `/api/v1/ai/recommendations`));
 
 /**
+ * GET /recommendations/me — the path PRD §8.6 specifies. Same handler as
+ * /ai/recommendations, which the SPA already calls; both stay supported.
+ */
+export const recommendationsRouter = Router();
+recommendationsRouter.get(
+  '/recommendations/me',
+  authenticate,
+  wrap(() => `/api/v1/ai/recommendations`),
+);
+
+/**
  * Ask the AI service to transcribe an uploaded lecture video (PRD §9.3).
  *
- * Exported from the router alongside `triggerIngestion` for the same reason:
+ * Exported from the router alongside `requestIngestion` for the same reason:
  * the job worker must not import the routers. Resolves the media URL itself so
  * the AI service never has to construct a backend-relative path it cannot
  * fetch, and re-checks the row first — the lecture may have gained a
@@ -234,26 +261,21 @@ function absoluteMediaUrl(storedUrl: string): string {
 }
 
 /**
- * Fire-and-forget ingestion trigger used by lecture creation.
- * Exported from the router to avoid a circular dependency with ai.service.
+ * Chunk + embed a lecture for RAG — run by the `ingestion` queue worker.
+ * Exported from the router (like `requestTranscription`) so the worker does
+ * not import route modules. Throws on failure so BullMQ retries with backoff.
  */
-export async function triggerIngestion(lectureId: string): Promise<void> {
-  try {
-    const upstream = await fetch(`${env.aiServiceUrl}/api/v1/ai/internal/ingest`, {
-      method: 'POST',
-      headers: internalHeaders(),
-      body: JSON.stringify({ lecture_id: lectureId }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!upstream.ok) {
-      logger.warn('ingestion_trigger_failed', { lecture_id: lectureId, status: upstream.status });
-    } else {
-      logger.info('ingestion_triggered', { lecture_id: lectureId });
-    }
-  } catch (err) {
-    logger.warn('ingestion_trigger_unreachable', {
-      lecture_id: lectureId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+export async function requestIngestion(lectureId: string): Promise<void> {
+  const upstream = await fetch(`${env.aiServiceUrl}/api/v1/ai/internal/ingest`, {
+    method: 'POST',
+    headers: internalHeaders(),
+    body: JSON.stringify({ lecture_id: lectureId }),
+    // Embedding a long transcript is many provider calls.
+    signal: AbortSignal.timeout(120_000),
+  });
+  const text = await upstream.text();
+  if (!upstream.ok) {
+    throw new Error(`ingestion failed: HTTP ${upstream.status} ${text.slice(0, 400)}`);
   }
+  logger.info('ingestion_done', { lecture_id: lectureId, response: text.slice(0, 300) });
 }

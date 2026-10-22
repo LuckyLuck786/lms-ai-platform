@@ -9,5 +9,9 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 120_000,
+    // Pin anything that could otherwise leak in from a developer's repo-root
+    // .env: no real AI service, no real SMTP. dotenv never overrides a value
+    // already present in the environment.
+    env: { AI_SERVICE_URL: 'http://127.0.0.1:9', SMTP_URL: '', INTERNAL_API_TOKEN: '' },
   },
 });

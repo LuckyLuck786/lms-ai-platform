@@ -10,9 +10,14 @@ import type { EmailCta, EmailKind } from '../services/email';
  *  - notifications: transactional email dispatch (SMTP)
  *  - streaks: daily cron evaluating broken streaks platform-wide
  *  - recommendations: nightly cron recomputing every learner's suggestions
+ *  - ingestion: chunk + embed new lecture material for RAG
  */
 
 // BullMQ requires maxRetriesPerRequest: null on its shared connection.
+//
+// Custom job ids must not contain ':' — BullMQ rejects them ("Custom Id cannot
+// contain :"), and every enqueue below swallows errors, so a colon silently
+// disables the queue. tests/queues.test.ts guards this.
 export const queueConnection = () =>
   new IORedis(env.redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false });
 
@@ -22,6 +27,7 @@ let notificationQueue: Queue | null = null;
 let masteryQueue: Queue | null = null;
 let transcriptionQueue: Queue | null = null;
 let recommendationQueue: Queue | null = null;
+let ingestionQueue: Queue | null = null;
 
 export interface EmailJob {
   kind: EmailKind;
@@ -89,7 +95,7 @@ export async function queueMasteryRecompute(payload: {
 }): Promise<void> {
   try {
     await getMasteryQueue().add('recompute', payload, {
-      jobId: `${payload.userId}:${payload.courseId}`,
+      jobId: `mastery-${payload.userId}-${payload.courseId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2_000 },
       removeOnComplete: 100,
@@ -120,7 +126,7 @@ export async function queueTranscription(payload: {
 }): Promise<void> {
   try {
     await getTranscriptionQueue().add('transcribe', payload, {
-      jobId: `transcribe:${payload.lectureId}`,
+      jobId: `transcribe-${payload.lectureId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5_000 },
       removeOnComplete: 100,
@@ -129,6 +135,34 @@ export async function queueTranscription(payload: {
     logger.info('transcription_queued', { lecture_id: payload.lectureId });
   } catch (err) {
     logger.warn('transcription_queue_failed', {
+      lecture_id: payload.lectureId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function getIngestionQueue(): Queue {
+  ingestionQueue ??= new Queue('ingestion', { connection: queueConnection() });
+  return ingestionQueue;
+}
+
+/**
+ * Chunk and embed a lecture's material for the AI tutor (PRD §9.3). Queued
+ * rather than fired from the request, so a failed embedding call is retried
+ * with backoff instead of leaving the lecture silently missing from RAG.
+ * Deduplicated per lecture: a burst of edits collapses into one run.
+ */
+export async function queueIngestion(payload: { lectureId: string }): Promise<void> {
+  try {
+    await getIngestionQueue().add('ingest', payload, {
+      jobId: `ingest-${payload.lectureId}`,
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+  } catch (err) {
+    logger.warn('ingestion_queue_failed', {
       lecture_id: payload.lectureId,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -183,5 +217,6 @@ export async function closeQueues(): Promise<void> {
     masteryQueue?.close(),
     transcriptionQueue?.close(),
     recommendationQueue?.close(),
+    ingestionQueue?.close(),
   ]);
 }

@@ -1,7 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
 import QRCode from 'qrcode';
-import fs from 'fs/promises';
-import path from 'path';
 
 /**
  * Certificate PDF generation (FR-S8) using pdf-lib — no browser/native deps.
@@ -23,7 +21,6 @@ export interface CertificateData {
   verifyBaseUrl?: string;
 }
 
-const OUT_DIR = path.join(process.cwd(), 'uploads', 'certificates');
 
 // --- Palette ---------------------------------------------------------------
 const INK = rgb(0.086, 0.129, 0.227); // #162139 deep navy
@@ -304,13 +301,4 @@ export async function buildCertificatePdf(data: CertificateData): Promise<Uint8A
   });
 
   return doc.save();
-}
-
-/** Writes the certificate to the local uploads dir; returns the file path. */
-export async function generateCertificatePdf(data: CertificateData): Promise<string> {
-  const bytes = await buildCertificatePdf(data);
-  await fs.mkdir(OUT_DIR, { recursive: true });
-  const filePath = path.join(OUT_DIR, `${data.certificateId}.pdf`);
-  await fs.writeFile(filePath, bytes);
-  return filePath;
 }
