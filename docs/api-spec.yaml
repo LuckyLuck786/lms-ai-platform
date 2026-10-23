@@ -679,6 +679,132 @@ paths:
       responses:
         '200': { description: 'Page of flagged posts: items, total, page, limit' }
 
+  /auth/forgot-password:
+    post:
+      tags: [auth]
+      security: []
+      summary: Email a one-hour, single-use reset link (same reply for unknown emails)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      responses: { '200': { description: '{ sent: true }' } }
+
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      security: []
+      summary: Set a new password from a reset link; ends every session
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token, new_password], properties: { token: { type: string }, new_password: { type: string, minLength: 8 } } } } } }
+      responses: { '200': { description: Password changed }, '400': { description: Invalid or expired link } }
+
+  /auth/providers:
+    get:
+      tags: [auth]
+      security: []
+      summary: Enabled sign-in providers ({ google_client_id } or null)
+      responses: { '200': { description: Providers } }
+
+  /auth/google:
+    post:
+      tags: [auth]
+      security: []
+      summary: Sign in or sign up with a Google ID token (verified server-side)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [credential], properties: { credential: { type: string } } } } } }
+      responses: { '200': { description: Tokens + user }, '400': { description: Google email not verified }, '503': { description: Not configured } }
+
+  /users/me/avatar:
+    post:
+      tags: [auth]
+      summary: Upload a profile photo (multipart field "avatar"; JPEG/PNG/WebP, 2 MB)
+      responses: { '200': { description: Updated user }, '400': { description: Wrong type or too large } }
+    delete:
+      tags: [auth]
+      summary: Remove the profile photo
+      responses: { '200': { description: Updated user } }
+
+  /users/me/export:
+    get:
+      tags: [auth]
+      summary: Download every record held about the caller (JSON attachment)
+      responses: { '200': { description: Export } }
+
+  /users/me:
+    delete:
+      tags: [auth]
+      summary: 'Delete (pseudonymise) the caller''s account — body { confirm: "DELETE", password }'
+      responses: { '200': { description: Deleted }, '401': { description: Wrong password }, '409': { description: Last admin } }
+
+  /users/me/flashcards:
+    get:
+      tags: [gamification]
+      summary: Spaced-repetition summary per enrolled course (due, new, total)
+      responses: { '200': { description: Summary } }
+
+  /users/me/flashcards/due:
+    get:
+      tags: [gamification]
+      summary: Next cards to study — overdue first, then new
+      parameters: [{ name: course_id, in: query, schema: { type: string, format: uuid } }, { name: limit, in: query, schema: { type: integer, maximum: 50 } }]
+      responses: { '200': { description: Cards } }
+
+  /flashcards/{id}/review:
+    post:
+      tags: [gamification]
+      summary: Record a review (again / hard / good / easy); SM-2 schedules the next one
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Next interval and due time }, '403': { description: Not enrolled } }
+
+  /ai/attempts/{attemptId}/questions/{questionId}/explain:
+    post:
+      tags: [ai]
+      summary: Explain my mistake — grounded explanation of a wrong answer (own submitted attempt; cached)
+      parameters: [{ name: attemptId, in: path, required: true, schema: { type: string, format: uuid } }, { name: questionId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Explanation + sources }, '400': { description: Answer was correct or attempt not submitted }, '404': { description: Not your attempt } }
+
+  /courses/{id}/at-risk:
+    get:
+      tags: [courses]
+      summary: At-risk learners with reasons (inactive 7d, quiz avg < 50 %, < 25 % after 14 d) — owner/admin
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Learners }, '403': { description: Not the owner } }
+
+  /courses/{id}/learners/{userId}/nudge:
+    post:
+      tags: [courses]
+      summary: Nudge a learner (notification + email), once per 24 h
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: userId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '201': { description: Sent }, '409': { description: Already nudged today } }
+
+  /courses/{id}/live-sessions:
+    get:
+      tags: [courses]
+      summary: Live classes (enrolled learners, owner, admin); link shown to the owner only
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Sessions with join window }, '403': { description: Not enrolled } }
+    post:
+      tags: [courses]
+      summary: Schedule a live class (https meeting link) and notify learners — owner/admin
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '201': { description: Created } }
+
+  /live-sessions/{id}/join:
+    post:
+      tags: [courses]
+      summary: Join (from 15 min before start to the end) — records attendance, returns the link
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: '{ join_url, attendance_recorded }' }, '400': { description: Too early or ended }, '403': { description: Not enrolled } }
+
+  /live-sessions/{id}/attendance:
+    get:
+      tags: [courses]
+      summary: Who joined — owner/admin
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Attendees } }
+
+  /admin/rag/backfill:
+    post:
+      tags: [admin]
+      summary: Queue AI indexing for lectures with transcripts but no embeddings
+      responses: { '200': { description: '{ queued }' } }
+
   /ai/recommendations:
     get:
       tags: [ai]

@@ -74,7 +74,10 @@ def _fallback(req: ExplainRequest, chunks: list[dict]) -> str:
 @router.post("/explain")
 def explain(req: ExplainRequest) -> dict:
     """POST /api/v1/ai/internal/explain — called by the backend only."""
-    chunks = relevant(retrieve(req.course_id, req.question_text))
+    # The question alone is often too short to match ("Which of these belong
+    # in the error envelope?"); the correct answer's wording anchors it.
+    correct = " ".join(o.text for o in req.options if o.is_correct)
+    chunks = relevant(retrieve(req.course_id, f"{req.question_text} {correct}".strip()))
     demo_mode = False
     if get_settings().llm_available:
         try:
