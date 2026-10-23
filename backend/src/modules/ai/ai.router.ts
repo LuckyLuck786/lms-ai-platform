@@ -3,9 +3,9 @@ import crypto from 'crypto';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { aiChatRateLimiter } from '../../middleware/rateLimit';
 import { env } from '../../config/env';
-import { forbidden, notFound } from '../../utils/errors';
+import { badRequest, forbidden, notFound } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { queryOne } from '../../db/pool';
+import { query, queryOne } from '../../db/pool';
 import { queueMasteryRecompute } from '../../jobs/queues';
 
 /**
@@ -162,6 +162,105 @@ aiRouter.post(
 aiRouter.post('/modules/:id/flashcards', authenticate, wrap((req) => `/api/v1/ai/modules/${req.params.id}/flashcards`));
 aiRouter.post('/study-plan', authenticate, wrap(() => `/api/v1/ai/study-plan`));
 aiRouter.get('/recommendations', authenticate, wrap(() => `/api/v1/ai/recommendations`));
+
+/**
+ * POST /ai/attempts/:attemptId/questions/:questionId/explain — "Explain my
+ * mistake". Only for the learner's own submitted attempt and a question they
+ * got wrong. The AI service receives the question with every option marked
+ * correct/chosen, retrieves course material and explains; the result is
+ * cached per attempt+question, so reopening it costs no LLM call.
+ */
+aiRouter.post(
+  '/attempts/:attemptId/questions/:questionId/explain',
+  authenticate,
+  aiChatRateLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { attemptId, questionId } = req.params;
+      const answer = await queryOne<{
+        user_id: string;
+        submitted_at: Date | null;
+        is_correct: boolean | null;
+        selected_option_ids: string[] | null;
+        text_answer: string | null;
+        question_text: string;
+        question_type: string;
+        course_id: string;
+        course_title: string;
+      }>(
+        `SELECT a.user_id, a.submitted_at, qa.is_correct, qa.selected_option_ids, qa.text_answer,
+                q.question_text, q.question_type, c.id AS course_id, c.title AS course_title
+         FROM quiz_attempts a
+         JOIN quiz_answers qa ON qa.attempt_id = a.id AND qa.question_id = $2
+         JOIN quiz_questions q ON q.id = qa.question_id
+         JOIN quizzes z ON z.id = a.quiz_id
+         JOIN modules m ON m.id = z.module_id
+         JOIN courses c ON c.id = m.course_id
+         WHERE a.id = $1`,
+        [attemptId, questionId],
+      );
+      if (!answer || answer.user_id !== req.user!.id) throw notFound('Answer not found');
+      if (!answer.submitted_at) throw badRequest('Submit the quiz before asking for explanations');
+      if (answer.is_correct) throw badRequest('This answer was correct — there is no mistake to explain');
+
+      const cached = await queryOne<{ explanation: string; source_lecture_ids: string[] | null }>(
+        'SELECT explanation, source_lecture_ids FROM quiz_explanations WHERE attempt_id = $1 AND question_id = $2',
+        [attemptId, questionId],
+      );
+      if (cached) {
+        const sources = cached.source_lecture_ids?.length
+          ? await query<{ lecture_id: string; lecture_title: string }>(
+              'SELECT id AS lecture_id, title AS lecture_title FROM lectures WHERE id = ANY($1)',
+              [cached.source_lecture_ids],
+            )
+          : [];
+        res.json({ explanation: cached.explanation, sources, cached: true });
+        return;
+      }
+
+      const options = await query<{ id: string; option_text: string; is_correct: boolean }>(
+        'SELECT id, option_text, is_correct FROM quiz_options WHERE question_id = $1 ORDER BY id',
+        [questionId],
+      );
+      const chosen = new Set(answer.selected_option_ids ?? []);
+      const upstream = await fetch(`${env.aiServiceUrl}/api/v1/ai/internal/explain`, {
+        method: 'POST',
+        headers: internalHeaders(req.user!, req.requestId),
+        body: JSON.stringify({
+          course_id: answer.course_id,
+          course_title: answer.course_title,
+          question_text: answer.question_text,
+          question_type: answer.question_type,
+          text_answer: answer.text_answer,
+          options:
+            answer.question_type === 'short_answer'
+              ? []
+              : options.map((o) => ({ text: o.option_text, is_correct: o.is_correct, chosen: chosen.has(o.id) })),
+        }),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+      });
+      if (!upstream.ok) {
+        res.status(502).json({ error: { code: 'AI_SERVICE_UNAVAILABLE', message: 'The AI tutor is unavailable — try again shortly' } });
+        return;
+      }
+      const result = (await upstream.json()) as {
+        explanation: string;
+        sources: { lecture_id: string; lecture_title: string }[];
+        demo_mode?: boolean;
+      };
+      if (!result.demo_mode) {
+        await query(
+          `INSERT INTO quiz_explanations (attempt_id, question_id, explanation, source_lecture_ids)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [attemptId, questionId, result.explanation, result.sources.map((x) => x.lecture_id)],
+        );
+      }
+      res.json({ explanation: result.explanation, sources: result.sources, cached: false });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * GET /recommendations/me — the path PRD §8.6 specifies. Same handler as

@@ -7,6 +7,7 @@ import { useAppDispatch } from '../../store/hooks';
 import { AuthResponse } from '../../utils/types';
 import { Alert, Card } from '../../components/common/ui';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../../services/demo';
+import GoogleSignIn from '../../components/common/GoogleSignIn';
 import { useI18n } from '../../utils/i18n';
 
 export default function Login() {
@@ -79,6 +80,12 @@ export default function Login() {
             {mutation.isPending ? t('auth.loggingIn') : t('auth.login')}
           </button>
         </form>
+        <p className="mt-3 text-sm">
+          <Link to="/forgot-password" className="link-quiet">{t('auth.forgotPassword')}</Link>
+        </p>
+        <div className="mt-4">
+          <GoogleSignIn />
+        </div>
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
           {t('auth.noAccount')}{' '}
           <Link to="/register" className="link-quiet">

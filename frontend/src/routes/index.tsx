@@ -15,6 +15,9 @@ import Terms from '../pages/legal/Terms';
 import Privacy from '../pages/legal/Privacy';
 import Account from '../pages/account/Account';
 import VerifyEmail from '../pages/account/VerifyEmail';
+import Review from '../pages/flashcards/Review';
+import ForgotPassword from '../pages/auth/ForgotPassword';
+import ResetPassword from '../pages/auth/ResetPassword';
 import { useAppSelector } from '../store/hooks';
 
 function HomeRedirect() {
@@ -39,6 +42,8 @@ const router = createBrowserRouter([
       { path: '/catalog', element: <CourseCatalog /> },
       { path: '/catalog/:id', element: <CourseDetail /> },
       { path: '/verify-email', element: <VerifyEmail /> },
+      { path: '/forgot-password', element: <ForgotPassword /> },
+      { path: '/reset-password', element: <ResetPassword /> },
 
       // Authenticated
       {
@@ -48,6 +53,7 @@ const router = createBrowserRouter([
           { path: '/learn/:courseId/:lectureId', element: <CoursePlayer /> },
           { path: '/quiz/:quizId', element: <QuizTake /> },
           { path: '/account', element: <Account /> },
+          { path: '/review', element: <Review /> },
         ],
       },
       {

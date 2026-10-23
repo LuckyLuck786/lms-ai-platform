@@ -40,6 +40,11 @@ export default function StudentDashboard() {
     queryFn: async () => (await api.get<Streak>('/users/me/streak')).data,
   });
 
+  const flashcards = useQuery({
+    queryKey: ['flashcards', 'summary'],
+    queryFn: async () => (await api.get<{ due: number; new: number }>('/users/me/flashcards')).data,
+  });
+
   const badges = useQuery({
     queryKey: ['badges'],
     queryFn: async () => (await api.get<{ items: Badge[] }>('/users/me/badges')).data,
@@ -113,6 +118,18 @@ export default function StudentDashboard() {
             ))}
           </div>
         </section>
+      )}
+
+      {flashcards.data && flashcards.data.due + flashcards.data.new > 0 && (
+        <Card className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">{t('review.dashboardTitle')}</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              {t('review.counts', { due: flashcards.data.due, new: flashcards.data.new })}
+            </p>
+          </div>
+          <Link to="/review" className="btn-primary">{t('review.start')}</Link>
+        </Card>
       )}
 
       <section aria-label={t('dashboard.myCourses')} className="space-y-3">

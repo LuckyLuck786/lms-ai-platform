@@ -36,6 +36,8 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
   const queryClient = useQueryClient();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [mode, setMode] = useState<string>('intermediate');
+  // Socratic: the tutor asks guiding questions instead of answering outright.
+  const [style, setStyle] = useState<'direct' | 'socratic'>('direct');
   const [depth, setDepth] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
   const sessions = useQuery({
     queryKey: ['ai-sessions', courseId],
     queryFn: async () =>
-      (await api.get<{ items: { id: string; mode: string }[] }>('/ai/chat/sessions', {
+      (await api.get<{ items: { id: string; mode: string; style?: 'direct' | 'socratic' }[] }>('/ai/chat/sessions', {
         params: { course_id: courseId },
       })).data,
   });
@@ -55,6 +57,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
     if (first && !sessionId) {
       setSessionId(first.id);
       setMode(first.mode || 'intermediate');
+      setStyle(first.style ?? 'direct');
     }
   }, [sessions.data, sessionId]);
 
@@ -97,6 +100,20 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
     onError: (err) => setError(apiErrorMessage(err)),
   });
 
+  const switchStyle = async (next: 'direct' | 'socratic') => {
+    setStyle(next);
+    try {
+      let sid = sessionId;
+      if (!sid) {
+        sid = (await api.post<{ id: string }>('/ai/chat/sessions', { course_id: courseId })).data.id;
+        setSessionId(sid);
+      }
+      await api.put(`/ai/chat/sessions/${sid}/mode`, { style: next });
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  };
+
   const switchMode = async (next: string) => {
     setMode(next);
     if (!sessionId) return;
@@ -124,6 +141,24 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
             <option key={m.value} value={m.value}>{t(m.labelKey)}</option>
           ))}
         </select>
+      </div>
+
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-pressed={style === 'socratic'}
+          onClick={() => void switchStyle(style === 'socratic' ? 'direct' : 'socratic')}
+          className={`rounded-md border px-2.5 py-1 text-xs font-medium ${
+            style === 'socratic'
+              ? 'border-brand-700 bg-brand-700 text-white dark:border-brand-300 dark:bg-brand-300 dark:text-ink-950'
+              : 'border-slate-300 text-slate-700 dark:border-white/15 dark:text-slate-300'
+          }`}
+        >
+          {t('ai.socratic')}
+        </button>
+        {style === 'socratic' && (
+          <span className="text-xs text-slate-600 dark:text-slate-400">{t('ai.socraticHint')}</span>
+        )}
       </div>
 
       {mode === 'auto' && depth && (

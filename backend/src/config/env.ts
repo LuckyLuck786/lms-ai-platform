@@ -101,6 +101,12 @@ export const env = {
     location: process.env.TRANSCODER_LOCATION ?? 'us-central1',
   },
 
+  // Sign in with Google (OAuth web client id; public, not a secret). Empty
+  // disables the button and the endpoint.
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+  },
+
   // Durable object storage for uploaded material. When GCS_BUCKET is set the
   // storage driver writes to Google Cloud Storage using the runtime service
   // account (Application Default Credentials) instead of the container disk,

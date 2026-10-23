@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import ExplainMistake from '../../components/ai-tutor/ExplainMistake';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
@@ -111,7 +112,8 @@ export default function QuizTake() {
             {quiz.data.questions.map((q, i) => {
               const outcome = result.per_question.find((p) => p.question_id === q.id);
               return (
-                <li key={q.id} className="flex items-start justify-between gap-3">
+                <li key={q.id}>
+                  <div className="flex items-start justify-between gap-3">
                   <span>
                     {i + 1}. {q.question_text}
                   </span>
@@ -132,6 +134,10 @@ export default function QuizTake() {
                       <X className="h-4 w-4 text-red-700 dark:text-red-400" />
                     )}
                   </span>
+                  </div>
+                  {outcome?.is_correct === false && (
+                    <ExplainMistake attemptId={result.attempt_id} questionId={q.id} />
+                  )}
                 </li>
               );
             })}

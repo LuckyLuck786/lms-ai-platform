@@ -1,10 +1,9 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { createApp } from '../../src/app';
 import { pool, query } from '../../src/db/pool';
 import { redis } from '../../src/db/redis';
-import { Queue } from 'bullmq';
-import { closeQueues, queueConnection } from '../../src/jobs/queues';
+import { closeQueues } from '../../src/jobs/queues';
+import { makeHelpers } from './helpers';
 
 /**
  * Integration suite: the real app against a real, freshly migrated and seeded
@@ -12,29 +11,7 @@ import { closeQueues, queueConnection } from '../../src/jobs/queues';
  * that catch SQL errors, migration drift and Redis-backed behaviour.
  */
 
-const app = createApp();
-
-// The app trusts one proxy hop, so X-Forwarded-For is the client IP. Giving
-// each request its own address keeps the real /auth/* limit (10/min/IP) out
-// of tests that are not about it; the rate-limit test pins a single IP.
-let ipSeq = 0;
-const nextIp = () => `198.51.100.${(ipSeq++ % 250) + 1}`;
-const api = () => {
-  const agent = request(app);
-  const ip = nextIp();
-  const wrap =
-    (method: 'get' | 'post' | 'put' | 'patch' | 'delete') =>
-    (url: string) =>
-      agent[method](url).set('x-forwarded-for', ip);
-  return { get: wrap('get'), post: wrap('post'), put: wrap('put'), patch: wrap('patch'), delete: wrap('delete') };
-};
-const PASSWORD = 'DemoPass123!';
-
-async function login(email: string): Promise<string> {
-  const res = await api().post('/api/v1/auth/login').send({ email, password: PASSWORD });
-  expect(res.status).toBe(200);
-  return res.body.access_token as string;
-}
+const { app, api, login, PASSWORD, latestVerificationToken } = makeHelpers();
 
 afterAll(async () => {
   await closeQueues().catch(() => undefined);
@@ -108,25 +85,6 @@ describe('PII encryption at rest (NFR §6)', () => {
     expect(res.body.items.map((u: { email: string }) => u.email)).toEqual(['student@vertexon.demo']);
   });
 });
-
-/** Pull the newest verification link for `to` out of the real email queue. */
-async function latestVerificationToken(to: string): Promise<string> {
-  const q = new Queue('notifications', { connection: queueConnection() });
-  try {
-    for (let i = 0; i < 20; i++) {
-      const jobs = await q.getJobs(['waiting', 'delayed', 'completed', 'failed', 'active']);
-      const hit = jobs
-        .filter((j) => j.data?.kind === 'account' && j.data.recipients?.includes(to))
-        .sort((a, b) => b.timestamp - a.timestamp)[0];
-      const token = hit?.data.cta?.path?.split('token=')[1];
-      if (token) return token;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    throw new Error(`no verification email queued for ${to}`);
-  } finally {
-    await q.close();
-  }
-}
 
 describe('accounts and email verification', () => {
   const email = `acct-${Date.now()}@example.com`;

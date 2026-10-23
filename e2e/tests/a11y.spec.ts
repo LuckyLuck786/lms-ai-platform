@@ -63,6 +63,9 @@ const screens: { name: string; role: string | null; path: () => string }[] = [
   { name: 'instructor dashboard', role: 'instructor', path: () => '/instructor' },
   { name: 'admin panel', role: 'admin', path: () => '/admin' },
   { name: 'terms', role: null, path: () => '/terms' },
+  { name: 'forgot password', role: null, path: () => '/forgot-password' },
+  { name: 'reset password', role: null, path: () => '/reset-password?token=placeholder-token-for-layout' },
+  { name: 'flashcard review', role: 'student', path: () => '/review' },
 ];
 
 for (const theme of ['light', 'dark'] as const) {

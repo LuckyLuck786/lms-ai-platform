@@ -22,10 +22,13 @@ const TOKEN_TTL_HOURS = 24;
 
 const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
+/** A password-reset link is a credential: it lives one hour, not a day. */
+const RESET_TTL_HOURS = 1;
+
 async function issueVerification(
   userId: string,
   recipient: string,
-  purpose: 'verify' | 'change',
+  purpose: 'verify' | 'change' | 'reset',
 ): Promise<void> {
   const token = crypto.randomBytes(32).toString('base64url');
   // Only the newest link per purpose stays valid.
@@ -42,9 +45,22 @@ async function issueVerification(
       purpose,
       purpose === 'change' ? encryptPii(normaliseEmail(recipient)) : null,
       purpose === 'change' ? emailHash(recipient) : null,
-      TOKEN_TTL_HOURS,
+      purpose === 'reset' ? RESET_TTL_HOURS : TOKEN_TTL_HOURS,
     ],
   );
+  if (purpose === 'reset') {
+    await queueEmail({
+      kind: 'account',
+      subject: 'Reset your Vertexon LMS-AI password',
+      body:
+        'Someone asked to reset the password for your Vertexon LMS-AI account.\n\n' +
+        `The link works once and expires in ${RESET_TTL_HOURS} hour. If you did not ask for this, ignore ` +
+        'this email — your password stays as it is.',
+      recipients: [recipient],
+      cta: { label: 'Choose a new password', path: `/reset-password?token=${token}` },
+    });
+    return;
+  }
   await queueEmail({
     kind: 'account',
     subject: purpose === 'verify' ? 'Verify your Vertexon LMS-AI email' : 'Confirm your new email address',
@@ -76,6 +92,52 @@ export async function resendVerification(userId: string): Promise<{ sent: boolea
   return { sent: true };
 }
 
+// --- Forgot password -------------------------------------------------------
+
+/**
+ * Always resolves the same way, whether or not the address has an account,
+ * so the endpoint cannot be used to discover who is registered.
+ */
+export async function requestPasswordReset(email: string): Promise<{ sent: true }> {
+  const user = await queryOne<{ id: string; is_active: boolean; deleted_at: Date | null }>(
+    'SELECT id, is_active, deleted_at FROM users WHERE email_hash = $1',
+    [emailHash(email)],
+  );
+  if (user && user.is_active && !user.deleted_at) {
+    await issueVerification(user.id, normaliseEmail(email), 'reset');
+  } else {
+    logger.info('password_reset_unknown_email');
+  }
+  return { sent: true };
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ ok: true }> {
+  const passwordHash = await hashPassword(newPassword);
+  const userId = await withTransaction(async (client) => {
+    const row = (
+      await client.query<{ id: string; user_id: string }>(
+        `SELECT id, user_id FROM email_verifications
+         WHERE token_hash = $1 AND purpose = 'reset' AND used_at IS NULL AND expires_at > now()
+         FOR UPDATE`,
+        [hashToken(token)],
+      )
+    ).rows[0];
+    if (!row) throw badRequest('This reset link is invalid or has expired', 'token');
+    await client.query('UPDATE email_verifications SET used_at = now() WHERE id = $1', [row.id]);
+    // Receiving the link proves the inbox, so the address counts as verified.
+    await client.query(
+      `UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()),
+              updated_at = now() WHERE id = $1`,
+      [row.user_id, passwordHash],
+    );
+    return row.user_id;
+  });
+  // A reset is often a response to a compromise: end every session.
+  await revokeAllRefreshTokens(userId);
+  logger.info('password_reset', { user_id: userId });
+  return { ok: true };
+}
+
 export async function verifyEmail(token: string): Promise<{ verified: true; email: string }> {
   return withTransaction(async (client) => {
     const row = (
@@ -87,7 +149,7 @@ export async function verifyEmail(token: string): Promise<{ verified: true; emai
         new_email_hash: string | null;
       }>(
         `SELECT id, user_id, purpose, new_email, new_email_hash FROM email_verifications
-         WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+         WHERE token_hash = $1 AND purpose IN ('verify', 'change') AND used_at IS NULL AND expires_at > now()
          FOR UPDATE`,
         [hashToken(token)],
       )

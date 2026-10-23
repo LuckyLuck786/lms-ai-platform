@@ -26,6 +26,9 @@ import { notificationsRouter } from './modules/notifications/notifications.route
 import { adminRouter } from './modules/admin/admin.router';
 import { paymentsRouter } from './modules/payments/payments.router';
 import { accountRouter } from './modules/account/account.router';
+import { flashcardsRouter } from './modules/flashcards/flashcards.router';
+import { atRiskRouter } from './modules/insights/atRisk.router';
+import { liveRouter } from './modules/live/live.router';
 import { storageDriver, streamStoredFile } from './utils/storage';
 
 export function createApp(): express.Express {
@@ -117,6 +120,9 @@ export function createApp(): express.Express {
   app.use('/api/v1', announcementsRouter);
   app.use('/api/v1', notificationsRouter);
   app.use('/api/v1', paymentsRouter);
+  app.use('/api/v1', flashcardsRouter);
+  app.use('/api/v1', atRiskRouter);
+  app.use('/api/v1', liveRouter);
   app.use('/api/v1', adminRouter);
   app.use('/api/v1', authenticate);
 

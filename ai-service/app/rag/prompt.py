@@ -16,15 +16,27 @@ MODE_INSTRUCTIONS = {
 }
 
 
+SOCRATIC_INSTRUCTIONS = (
+    "Tutor SOCRATICALLY: do not give the answer outright. Ask ONE guiding question at a time "
+    "that moves the learner a step closer, built on what they just said. If their reasoning is "
+    "right, confirm it briefly and ask the next question; if it is wrong, point to the specific "
+    "gap without correcting it for them. Give the full answer only if they explicitly ask for it "
+    "or are clearly stuck after several tries. Keep each reply under 80 words."
+)
+
+
 def build_system_prompt(
     course_title: str,
     mode: str,
     context_blocks: list[str],
     extra_guidance: str = "",
+    style: str = "direct",
 ) -> str:
     context = "\n\n".join(context_blocks) or "(no course material was retrieved)"
     depth = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["intermediate"])
     guidance = f"{extra_guidance}\n" if extra_guidance.strip() else ""
+    if style == "socratic":
+        guidance += SOCRATIC_INSTRUCTIONS + "\n"
     return (
         f"You are the AI tutor for the course “{course_title}”. "
         f"Answer ONLY using the CONTEXT excerpts below — never invent facts that are not there. "

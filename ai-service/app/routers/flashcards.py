@@ -51,6 +51,21 @@ def generate_flashcards(module_id: str) -> dict:
     if not module:
         raise HTTPException(status_code=404, detail="Module not found")
 
+    # Cards are shared by every learner of the module and carry their review
+    # schedules (flashcard_reviews), so an existing set is returned, never
+    # regenerated: replacing it would wipe everyone's spaced-repetition history.
+    existing = query_all(
+        "SELECT id, question, answer FROM flashcards WHERE module_id = %s ORDER BY id", [module_id]
+    )
+    if existing:
+        return {
+            "module_id": module_id,
+            "cards": [{"id": str(c["id"]), "question": c["question"], "answer": c["answer"]} for c in existing],
+            "count": len(existing),
+            "demo_mode": False,
+            "reused": True,
+        }
+
     lectures = query_all(
         "SELECT id, title, transcript FROM lectures WHERE module_id = %s ORDER BY order_index",
         [module_id],
@@ -78,8 +93,6 @@ def generate_flashcards(module_id: str) -> dict:
         cards = _fallback_cards(lectures)
         demo_mode = True
 
-    # Replace any previous generated set for this module (idempotent)
-    execute("DELETE FROM flashcards WHERE module_id = %s", [module_id])
     created = [
         execute(
             "INSERT INTO flashcards (module_id, question, answer) VALUES (%s, %s, %s) RETURNING id",

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { api, mediaUrl } from '../services/api';
 import { User } from '../utils/types';
 import { clearAuth, setUser } from '../store/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -68,6 +68,11 @@ export default function AppLayout() {
             <NavLink to="/catalog" className={navLinkClass}>
               {t('nav.catalog')}
             </NavLink>
+            {user?.roles.includes('student') && (
+              <NavLink to="/review" className={navLinkClass}>
+                {t('nav.review')}
+              </NavLink>
+            )}
             {user?.roles.includes('instructor') && (
               <NavLink to="/instructor" className={navLinkClass}>
                 {t('nav.instructor')}
@@ -102,6 +107,9 @@ export default function AppLayout() {
                   to="/account"
                   className="hidden text-sm text-slate-600 hover:text-slate-900 hover:underline sm:inline dark:text-slate-400 dark:hover:text-white"
                 >
+                  {user.avatar_url && (
+                    <img src={mediaUrl(user.avatar_url)} alt="" className="mr-2 inline-block h-6 w-6 rounded-full object-cover align-middle" />
+                  )}
                   {user.full_name}
                   <span className="ml-1 text-[11px] uppercase tracking-caps text-slate-600 dark:text-slate-400">
                     {user.role}

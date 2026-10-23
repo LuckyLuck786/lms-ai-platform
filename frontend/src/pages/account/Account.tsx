@@ -1,6 +1,8 @@
 import { FormEvent, ReactNode, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { api, apiErrorMessage } from '../../services/api';
+import { api, apiErrorMessage, mediaUrl } from '../../services/api';
+import { useNavigate } from 'react-router-dom';
+import { clearAuth } from '../../store/authSlice';
 import { setAuth, setUser } from '../../store/authSlice';
 import { useAppDispatch } from '../../store/hooks';
 import { AuthResponse, User } from '../../utils/types';
@@ -37,6 +39,13 @@ export default function Account() {
         <div className="eyebrow mb-1">{t('account.eyebrow')}</div>
         <h1 className="font-display text-3xl text-ink-950 dark:text-white">{t('account.title')}</h1>
       </div>
+      <PhotoSection
+        user={me.data}
+        onSaved={(u) => {
+          dispatch(setUser(u));
+          void me.refetch();
+        }}
+      />
       <ProfileForm
         user={me.data}
         onSaved={(u) => {
@@ -46,6 +55,7 @@ export default function Account() {
       />
       <EmailSection user={me.data} />
       <PasswordForm />
+      <DataSection />
     </div>
   );
 }
@@ -283,6 +293,133 @@ function PasswordForm() {
           {t('account.changePassword')}
         </button>
       </form>
+    </Section>
+  );
+}
+
+function PhotoSection({ user, onSaved }: { user: User; onSaved: (u: User) => void }) {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<Status>(null);
+
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append('avatar', file);
+      return (await api.post<User>('/users/me/avatar', body)).data;
+    },
+    onSuccess: (u) => {
+      setStatus({ kind: 'success', text: t('account.photoSaved') });
+      onSaved(u);
+    },
+    onError: (e) => setStatus({ kind: 'error', text: apiErrorMessage(e) }),
+  });
+  const remove = useMutation({
+    mutationFn: async () => (await api.delete<User>('/users/me/avatar')).data,
+    onSuccess: (u) => onSaved(u),
+    onError: (e) => setStatus({ kind: 'error', text: apiErrorMessage(e) }),
+  });
+
+  return (
+    <Section title={t('account.photo')}>
+      {status && <div className="mb-4"><Alert kind={status.kind}>{status.text}</Alert></div>}
+      <div className="flex flex-wrap items-center gap-4">
+        {user.avatar_url ? (
+          <img src={mediaUrl(user.avatar_url)} alt={t('account.photoAlt')} className="h-20 w-20 rounded-full border border-slate-300 object-cover dark:border-white/15" />
+        ) : (
+          <div aria-hidden className="flex h-20 w-20 items-center justify-center rounded-full border border-slate-300 text-2xl font-semibold dark:border-white/15">
+            {user.full_name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="space-y-2">
+          <label className="btn-secondary cursor-pointer" htmlFor="acct-photo">
+            {upload.isPending ? t('account.uploading') : t('account.uploadPhoto')}
+          </label>
+          <input
+            id="acct-photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              setStatus(null);
+              if (file) upload.mutate(file);
+              e.target.value = '';
+            }}
+          />
+          {user.avatar_url && (
+            <button type="button" className="ml-2 text-sm text-slate-600 underline dark:text-slate-400" onClick={() => remove.mutate()}>
+              {t('account.removePhoto')}
+            </button>
+          )}
+          <p className="text-xs text-slate-600 dark:text-slate-400">{t('account.photoHint')}</p>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function DataSection() {
+  const { t } = useI18n();
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const [confirm, setConfirm] = useState('');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<Status>(null);
+
+  const exportData = useMutation({
+    mutationFn: async () => (await api.get('/users/me/export')).data,
+    onSuccess: (data) => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vertexon-my-data.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (e) => setStatus({ kind: 'error', text: apiErrorMessage(e) }),
+  });
+
+  const del = useMutation({
+    mutationFn: async () => (await api.delete('/users/me', { data: { confirm, password: password || undefined } })).data,
+    onSuccess: () => {
+      dispatch(clearAuth());
+      navigate('/login');
+    },
+    onError: (e) => setStatus({ kind: 'error', text: apiErrorMessage(e) }),
+  });
+
+  return (
+    <Section title={t('account.data')}>
+      {status && <div className="mb-4"><Alert kind={status.kind}>{status.text}</Alert></div>}
+      <p className="mb-3 text-sm">{t('account.exportHint')}</p>
+      <button type="button" className="btn-secondary" disabled={exportData.isPending} onClick={() => exportData.mutate()}>
+        {t('account.download')}
+      </button>
+
+      <div className="mt-6 border-t border-slate-300/70 pt-4 dark:border-white/10">
+        <h3 className="font-semibold text-red-800 dark:text-red-300">{t('account.deleteTitle')}</h3>
+        <p className="mb-3 mt-1 text-sm">{t('account.deleteHint')}</p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setStatus(null);
+            del.mutate();
+          }}
+          className="space-y-3"
+        >
+          <div>
+            <label className="label" htmlFor="del-confirm">{t('account.deleteConfirm')}</label>
+            <input id="del-confirm" className="input" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+          </div>
+          <div>
+            <label className="label" htmlFor="del-password">{t('account.confirmPassword')}</label>
+            <input id="del-password" className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <button type="submit" className="btn-secondary border-red-700 text-red-800 dark:border-red-400 dark:text-red-300" disabled={confirm !== 'DELETE' || del.isPending}>
+            {t('account.deleteButton')}
+          </button>
+        </form>
+      </div>
     </Section>
   );
 }

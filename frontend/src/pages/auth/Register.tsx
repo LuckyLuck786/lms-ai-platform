@@ -7,6 +7,7 @@ import { useAppDispatch } from '../../store/hooks';
 import { AuthResponse } from '../../utils/types';
 import { Alert, Card } from '../../components/common/ui';
 import { useI18n } from '../../utils/i18n';
+import GoogleSignIn from '../../components/common/GoogleSignIn';
 
 export default function Register() {
   const { t } = useI18n();
@@ -96,6 +97,9 @@ export default function Register() {
             {mutation.isPending ? t('auth.creating') : t('auth.register')}
           </button>
         </form>
+        <div className="mt-4">
+          <GoogleSignIn text="signup_with" />
+        </div>
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
           {t('auth.alreadyRegistered')}{' '}
           <Link to="/login" className="font-medium text-brand-600 hover:underline dark:text-brand-300">

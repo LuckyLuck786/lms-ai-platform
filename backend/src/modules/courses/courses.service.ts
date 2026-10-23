@@ -276,7 +276,7 @@ export async function rateCourse(user: AuthUser, courseId: string, input: RateCo
   return { ...(await ratingSummary(courseId)), mine: row };
 }
 
-async function getOwnedCourse(courseId: string, user: AuthUser, adminOverride = true) {
+export async function getOwnedCourse(courseId: string, user: AuthUser, adminOverride = true) {
   const course = await queryOne<{ id: string; instructor_id: string; status: string }>(
     'SELECT id, instructor_id, status FROM courses WHERE id = $1',
     [courseId],

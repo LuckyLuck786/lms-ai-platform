@@ -31,7 +31,16 @@ class MessageRequest(BaseModel):
 
 
 class ModeRequest(BaseModel):
-    mode: str
+    # Either or both: depth (FR-A6) and tutoring style (direct / socratic).
+    mode: Optional[str] = None
+    style: Optional[str] = None
+
+
+VALID_STYLES = {"direct", "socratic"}
+
+# Turns of earlier conversation sent with each message, so follow-ups ("and
+# merge sort?") and Socratic back-and-forth have context.
+HISTORY_TURNS = 8
 
 
 @router.post("/sessions")
@@ -61,7 +70,7 @@ def list_sessions(
         where += " AND s.course_id = %s"
     items = query_all(
         f"""
-        SELECT s.id, s.course_id, s.mode, s.created_at, c.title AS course_title,
+        SELECT s.id, s.course_id, s.mode, s.style, s.created_at, c.title AS course_title,
                (SELECT count(*)::int FROM ai_chat_messages m WHERE m.session_id = s.id) AS message_count
         FROM ai_chat_sessions s JOIN courses c ON c.id = s.course_id
         WHERE {where}
@@ -76,7 +85,7 @@ def list_sessions(
 def list_messages(session_id: str, x_user_id: Optional[str] = Header(default=None)) -> dict:
     user_id = _require_user(x_user_id)
     session = query_one(
-        "SELECT id, course_id, mode FROM ai_chat_sessions WHERE id = %s AND user_id = %s",
+        "SELECT id, course_id, mode, style FROM ai_chat_sessions WHERE id = %s AND user_id = %s",
         [session_id, user_id],
     )
     if not session:
@@ -113,7 +122,12 @@ def list_messages(session_id: str, x_user_id: Optional[str] = Header(default=Non
                     )
         m["sources"] = sources
         result.append(m)
-    return {"items": result, "mode": session["mode"], "course_id": session["course_id"]}
+    return {
+        "items": result,
+        "mode": session["mode"],
+        "style": session["style"],
+        "course_id": session["course_id"],
+    }
 
 
 @router.post("/sessions/{session_id}/messages")
@@ -126,7 +140,7 @@ def send_message(
         raise HTTPException(status_code=400, detail="message must not be empty")
 
     session = query_one(
-        "SELECT id, course_id, mode FROM ai_chat_sessions WHERE id = %s AND user_id = %s",
+        "SELECT id, course_id, mode, style FROM ai_chat_sessions WHERE id = %s AND user_id = %s",
         [session_id, user_id],
     )
     if not session:
@@ -145,6 +159,20 @@ def send_message(
     else:
         depth = mode
 
+    style = session.get("style") or "direct"
+    history = [
+        {"role": "user" if m["sender"] == "user" else "assistant", "content": m["content"]}
+        for m in reversed(
+            query_all(
+                """
+                SELECT sender, content FROM ai_chat_messages WHERE session_id = %s
+                ORDER BY created_at DESC, id DESC LIMIT %s
+                """,
+                [session_id, HISTORY_TURNS],
+            )
+        )
+    ]
+
     # Step 2: similarity search scoped to this course (PRD §9.2)
     chunks = retrieve(session["course_id"], req.message)
 
@@ -155,9 +183,9 @@ def send_message(
         try:
             reply = complete(
                 build_system_prompt(
-                    course["title"], depth, build_context_blocks(chunks), guidance
+                    course["title"], depth, build_context_blocks(chunks), guidance, style
                 ),
-                [{"role": "user", "content": req.message}],
+                [*history, {"role": "user", "content": req.message}],
             )
         except LLMError:
             reply = fallback_reply(chunks)
@@ -191,19 +219,23 @@ def send_message(
         [session_id, reply, source_ids],
     )
 
-    return {"reply": reply, "sources": source_meta, "mode": mode, "depth": depth}
+    return {"reply": reply, "sources": source_meta, "mode": mode, "depth": depth, "style": style}
 
 
 @router.put("/sessions/{session_id}/mode")
 def set_mode(
     session_id: str, req: ModeRequest, x_user_id: Optional[str] = Header(default=None)
 ) -> dict:
-    """Switch explanation depth (FR-A6)."""
+    """Switch explanation depth (FR-A6) and/or tutoring style (direct / socratic)."""
     user_id = _require_user(x_user_id)
-    if req.mode not in VALID_MODES:
+    if req.mode is None and req.style is None:
+        raise HTTPException(status_code=400, detail="send mode and/or style")
+    if req.mode is not None and req.mode not in VALID_MODES:
         raise HTTPException(
             status_code=400, detail=f"mode must be one of {sorted(VALID_MODES)}"
         )
+    if req.style is not None and req.style not in VALID_STYLES:
+        raise HTTPException(status_code=400, detail=f"style must be one of {sorted(VALID_STYLES)}")
     session = query_one(
         "SELECT id FROM ai_chat_sessions WHERE id = %s AND user_id = %s",
         [session_id, user_id],
@@ -211,5 +243,11 @@ def set_mode(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    execute("UPDATE ai_chat_sessions SET mode = %s WHERE id = %s", [req.mode, session_id])
-    return {"session_id": session_id, "mode": req.mode}
+    row = execute(
+        """
+        UPDATE ai_chat_sessions SET mode = COALESCE(%s, mode), style = COALESCE(%s, style)
+        WHERE id = %s RETURNING mode, style
+        """,
+        [req.mode, req.style, session_id],
+    )
+    return {"session_id": session_id, "mode": row["mode"], "style": row["style"]}

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from .core.config import get_settings
 from .routers import (
     chat,
+    explain,
     flashcards,
     ingest,
     quiz_gen,
@@ -104,6 +105,7 @@ app.include_router(ingest.router, prefix="/api/v1/ai/internal", tags=["ai-ingest
 # Transcription is an internal job endpoint too: the backend worker calls it,
 # and the internal-token guard covers it as part of /api/v1/ai.
 app.include_router(transcribe.router, prefix="/api/v1/ai/internal", tags=["ai-transcription"])
+app.include_router(explain.router, prefix="/api/v1/ai/internal", tags=["ai-explain"])
 app.include_router(recommendations.router, prefix="/api/v1/ai", tags=["ai-recommendations"])
 app.include_router(
     recommendations.internal_router, prefix="/api/v1/ai/internal", tags=["ai-recommendations"]

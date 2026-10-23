@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import AtRiskLearners from '../../components/instructor/AtRiskLearners';
 import { api, apiErrorMessage } from '../../services/api';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { Course } from '../../utils/types';
@@ -250,6 +251,7 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
           </Card>
         </>
       )}
+      {courseId && <AtRiskLearners courseId={courseId} />}
     </section>
   );
 }

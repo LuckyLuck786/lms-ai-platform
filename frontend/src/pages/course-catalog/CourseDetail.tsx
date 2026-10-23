@@ -19,6 +19,7 @@ import {
   Enrollment,
 } from '../../utils/types';
 import CourseForum from '../../components/student/CourseForum';
+import LiveClasses from '../../components/student/LiveClasses';
 import { useI18n } from '../../utils/i18n';
 import { CheckoutCancelled, purchaseCourse } from '../../services/checkout';
 import { Check, ClipboardCheck, GraduationCap, Play, Video } from '../../components/common/Icon';
@@ -305,6 +306,11 @@ export default function CourseDetail() {
           )}
         </Card>
       </section>
+
+      {/* Live classes: owner schedules; enrolled learners join + attendance */}
+      {!!user && (enrolled || isOwner || user.roles.includes('admin')) && (
+        <LiveClasses courseId={c.id} isOwner={isOwner || user.roles.includes('admin')} />
+      )}
 
       {/* Forum + announcements (Phase 4) */}
       {!!user && (
