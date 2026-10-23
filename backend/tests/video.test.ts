@@ -83,6 +83,25 @@ describe('video pipeline', () => {
     expect(String(queryMock.mock.calls[0][0])).toMatch(/hls_status = 'failed'/);
   });
 
+  it('retries a silent source once with the video-only ladder', async () => {
+    queryOneMock.mockResolvedValue({ video_url: '/uploads/x.mp4', hls_status: 'processing', hls_job: 'jobs/1' });
+    getJob.mockResolvedValue([
+      {
+        state: 'FAILED',
+        templateId: 'preset/web-hd',
+        inputUri: 'gs://media-bucket/x.mp4',
+        error: { message: 'atom atom0 does not have any inputs ([input0]) with an audio track' },
+      },
+    ]);
+    createJob.mockResolvedValue([{ name: 'jobs/2' }]);
+    await expect(processLectureVideo(LECTURE)).resolves.toBe('pending');
+    const job = createJob.mock.calls[0][0].job;
+    expect(job.inputUri).toBe('gs://media-bucket/x.mp4');
+    expect(job.templateId).toBeUndefined();
+    expect(job.config.manifests[0].fileName).toBe('manifest.m3u8');
+    expect(queryMock.mock.calls[0][1]).toEqual([LECTURE, 'jobs/2']);
+  });
+
   it('does nothing for a lecture without video or one already streaming', async () => {
     queryOneMock.mockResolvedValueOnce({ video_url: null, hls_status: null, hls_job: null });
     await expect(processLectureVideo(LECTURE)).resolves.toBe('done');

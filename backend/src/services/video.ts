@@ -22,6 +22,24 @@ export type VideoStep = 'pending' | 'done';
 /** Name of the HLS master playlist written by preset/web-hd. */
 export const HLS_MANIFEST = 'manifest.m3u8';
 
+/**
+ * Fallback for silent sources: preset/web-hd needs an audio track and fails
+ * without one ("does not have any inputs with an audio track"). This
+ * video-only ladder keeps adaptive streaming for screen recordings and
+ * silent clips. Width follows the source aspect ratio.
+ */
+const VIDEO_ONLY_CONFIG = {
+  elementaryStreams: [
+    { key: 'v360', videoStream: { h264: { heightPixels: 360, bitrateBps: 800_000, frameRate: 30 } } },
+    { key: 'v720', videoStream: { h264: { heightPixels: 720, bitrateBps: 2_500_000, frameRate: 30 } } },
+  ],
+  muxStreams: [
+    { key: 'hls-360', container: 'ts', elementaryStreams: ['v360'], segmentSettings: { segmentDuration: { seconds: 6 } } },
+    { key: 'hls-720', container: 'ts', elementaryStreams: ['v720'], segmentSettings: { segmentDuration: { seconds: 6 } } },
+  ],
+  manifests: [{ fileName: HLS_MANIFEST, type: 'HLS' as const, muxStreams: ['hls-360', 'hls-720'] }],
+};
+
 /** Largest external source the pipeline will copy in (bytes). */
 const MAX_SOURCE_BYTES = 2 * 1024 ** 3;
 
@@ -111,6 +129,20 @@ export async function processLectureVideo(lectureId: string): Promise<VideoStep>
     return 'done';
   }
   if (state === 'FAILED') {
+    // A silent source fails the audio+video preset; retry once video-only.
+    if (job.templateId === 'preset/web-hd' && /audio/i.test(job.error?.message ?? '')) {
+      const [retry] = await client.createJob({
+        parent: client.locationPath(env.video.project, env.video.location),
+        job: {
+          inputUri: job.inputUri,
+          outputUri: `gs://${env.video.bucket}/hls/${lectureId}/`,
+          config: VIDEO_ONLY_CONFIG,
+        },
+      });
+      await query('UPDATE lectures SET hls_job = $2 WHERE id = $1', [lectureId, retry.name]);
+      logger.info('video_transcode_retry_video_only', { lecture_id: lectureId, job: retry.name });
+      return 'pending';
+    }
     await query("UPDATE lectures SET hls_status = 'failed', hls_job = NULL WHERE id = $1", [lectureId]);
     logger.error('video_transcode_failed', { lecture_id: lectureId, error: job.error?.message });
     return 'done';
