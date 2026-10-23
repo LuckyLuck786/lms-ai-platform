@@ -116,6 +116,28 @@ see an AI quiz only after the instructor approves it.
 - **Streaming video:** uploads and existing lectures are transcoded and served from the CDN.
 - **Staging environment** and a tag-based production release.
 
+## v1.1.0 — features beyond the PRD (24 October 2026)
+
+Re-verified first: `verify_prd.py` still passes **35/35** on staging, so all of PRD v1.0 remains met.
+Added afterwards:
+
+| Feature | Where | Verified |
+|---|---|---|
+| Forgot password (1-hour single-use link, no account enumeration) | `/forgot-password`, `/reset-password` | integration + browser tests |
+| Sign in with Google (ID token verified server-side; links by Google subject) | Login / Register | integration tests; **needs a Google OAuth client ID to switch on** |
+| Profile photo upload | Account page, header | integration + browser; live on GCS |
+| Download my data / delete my account (pseudonymised) | Account page | integration + browser |
+| Explain my mistake (RAG-grounded, cached) | Quiz results | integration; live with Groq on staging |
+| Spaced-repetition flashcards (SM-2) | `/review`, dashboard | unit + integration; live |
+| Socratic tutor mode (+ conversation history) | AI tutor panel | live: asks guiding questions, builds on answers |
+| At-risk learner alerts + nudge | Instructor analytics | unit + integration; live |
+| Live classes with attendance | Course page | unit + integration + browser; live |
+
+Two quality fixes came out of testing these live: retrieval now ignores material below 0.55
+similarity (measured: on-topic 0.66–0.72, unrelated ≤ 0.51), so the tutor no longer cites
+lectures that do not cover the question or invents lecture titles; and an admin re-index
+(`POST /admin/rag/backfill`) embeds lectures that a seed script inserted without indexing.
+
 ## Defects found and fixed in this release
 
 | Defect | Effect | Fix |
