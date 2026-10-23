@@ -13,6 +13,8 @@ import QuizTake from '../pages/quizzes/QuizTake';
 import VerifyCertificate from '../pages/certificates/VerifyCertificate';
 import Terms from '../pages/legal/Terms';
 import Privacy from '../pages/legal/Privacy';
+import Account from '../pages/account/Account';
+import VerifyEmail from '../pages/account/VerifyEmail';
 import { useAppSelector } from '../store/hooks';
 
 function HomeRedirect() {
@@ -36,6 +38,7 @@ const router = createBrowserRouter([
       { path: '/register', element: <Register /> },
       { path: '/catalog', element: <CourseCatalog /> },
       { path: '/catalog/:id', element: <CourseDetail /> },
+      { path: '/verify-email', element: <VerifyEmail /> },
 
       // Authenticated
       {
@@ -44,6 +47,7 @@ const router = createBrowserRouter([
           { path: '/', element: <HomeRedirect /> },
           { path: '/learn/:courseId/:lectureId', element: <CoursePlayer /> },
           { path: '/quiz/:quizId', element: <QuizTake /> },
+          { path: '/account', element: <Account /> },
         ],
       },
       {

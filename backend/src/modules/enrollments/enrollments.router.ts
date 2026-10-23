@@ -85,7 +85,7 @@ modulesRouter.get(
     );
     if (!mod) throw notFound('Module not found');
     const lectures = await query(
-      `SELECT id, module_id, title, video_url, duration_seconds, order_index, resource_urls
+      `SELECT id, module_id, title, video_url, hls_url, duration_seconds, order_index, resource_urls
        FROM lectures WHERE module_id = $1 ORDER BY order_index`,
       [mod.id],
     );

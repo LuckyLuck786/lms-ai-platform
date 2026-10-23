@@ -49,7 +49,7 @@ const fmtTime = (seconds: number): string =>
 function Kpi({ label, value }: { label: string; value: string | number }) {
   return (
     <Card className="!p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-slate-600 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
     </Card>
   );
@@ -86,7 +86,7 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
     <section aria-label={t('instructor.analytics')} className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">{t('instructor.analytics')}</h2>
-        <p className="text-sm text-slate-500">{t('instructor.analyticsHint')}</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">{t('instructor.analyticsHint')}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -136,14 +136,14 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
           <Card>
             <h3 className="mb-3 font-semibold">{t('instructor.lectureDropoff')}</h3>
             {data.lectures.length === 0 ? (
-              <p className="text-sm text-slate-500">{t('instructor.noLearnersYet')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">{t('instructor.noLearnersYet')}</p>
             ) : data.overview.enrollments === 0 ? (
-              <p className="text-sm text-slate-500">{t('instructor.noLearnersYet')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">{t('instructor.noLearnersYet')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-xs uppercase text-slate-400 dark:border-slate-800">
+                    <tr className="border-b border-slate-200 text-xs uppercase text-slate-600 dark:text-slate-400 dark:border-slate-800">
                       <th className="py-2 pr-3">{t('instructor.colLecture')}</th>
                       <th className="py-2 pr-3">{t('instructor.colLearners')}</th>
                       <th className="py-2 pr-3">{t('instructor.colCompleted')}</th>
@@ -159,7 +159,7 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
                       >
                         <td className="py-2 pr-3">
                           <span className="font-medium">{lec.title}</span>
-                          <span className="block text-xs text-slate-400">{lec.module_title}</span>
+                          <span className="block text-xs text-slate-600 dark:text-slate-400">{lec.module_title}</span>
                         </td>
                         <td className="py-2 pr-3">{lec.learners}</td>
                         <td className="py-2 pr-3">
@@ -190,7 +190,7 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
                   </tbody>
                 </table>
                 {worstDropOff > 0 && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
                     <Search className="h-3.5 w-3.5 shrink-0" />
                     {t('instructor.analyticsHint')}
                   </p>
@@ -202,12 +202,12 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
           <Card>
             <h3 className="mb-3 font-semibold">{t('instructor.quizPerformance')}</h3>
             {data.quizzes.length === 0 ? (
-              <p className="text-sm text-slate-500">{t('quiz.noQuizzes')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">{t('quiz.noQuizzes')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-xs uppercase text-slate-400 dark:border-slate-800">
+                    <tr className="border-b border-slate-200 text-xs uppercase text-slate-600 dark:text-slate-400 dark:border-slate-800">
                       <th className="py-2 pr-3">{t('instructor.colQuiz')}</th>
                       <th className="py-2 pr-3">{t('instructor.colAttempts')}</th>
                       <th className="py-2 pr-3">{t('instructor.colScore')}</th>
@@ -221,7 +221,7 @@ export default function InstructorAnalytics({ courses }: { courses: Course[] }) 
                       >
                         <td className="py-2 pr-3">
                           <span className="font-medium">{q.title}</span>
-                          <span className="block text-xs text-slate-400">{q.module_title}</span>
+                          <span className="block text-xs text-slate-600 dark:text-slate-400">{q.module_title}</span>
                         </td>
                         <td className="py-2 pr-3">{q.attempts}</td>
                         <td className="py-2 pr-3">

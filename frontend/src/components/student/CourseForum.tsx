@@ -104,7 +104,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
 
         {threads.isLoading && <div className="flex justify-center py-6"><Spinner /></div>}
         {threads.data?.items?.length === 0 && (
-          <Card className="text-slate-500">No discussions yet. Start one.</Card>
+          <Card className="text-slate-600 dark:text-slate-400">No discussions yet. Start one.</Card>
         )}
 
         {threads.data?.items.map((t) => (
@@ -116,11 +116,11 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="font-medium">{t.title}</span>
-                <span className="shrink-0 text-xs text-slate-400">
+                <span className="shrink-0 text-xs text-slate-600 dark:text-slate-400">
                   {t.post_count} post{t.post_count === 1 ? '' : 's'}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-slate-400">
+              <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                 started by {t.created_by_name} · {new Date(t.created_at).toLocaleDateString()}
               </div>
             </button>
@@ -132,7 +132,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
                   <div key={p.id} className="rounded-lg bg-paper-sunk p-3 text-sm dark:bg-ink-800/60">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{p.author_name}</span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-600 dark:text-slate-400">
                         {new Date(p.created_at).toLocaleString()}
                       </span>
                     </div>
@@ -140,7 +140,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
                     <div className="mt-2 flex gap-3 text-xs">
                       {!p.is_flagged ? (
                         <button
-                          className="inline-flex items-center gap-1 text-slate-400 transition-colors hover:text-gold-600"
+                          className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400 transition-colors hover:text-gold-600"
                           onClick={() => flag.mutate(p.id)}
                         >
                           <Flag className="h-3.5 w-3.5" /> Flag
@@ -153,7 +153,7 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
                       )}
                       {canModerate && (
                         <button
-                          className="inline-flex items-center gap-1 text-slate-400 transition hover:text-red-600"
+                          className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400 transition hover:text-red-600"
                           onClick={() => remove.mutate(p.id)}
                         >
                           <Trash className="h-3.5 w-3.5" /> Remove
@@ -193,12 +193,12 @@ export default function CourseForum({ courseId, canPost, canModerate }: Props) {
       <aside aria-label="Announcements" className="space-y-3">
         <h2 className="section-title">Announcements</h2>
         {announcements.data?.items?.length === 0 && (
-          <Card className="text-sm text-slate-500">No announcements.</Card>
+          <Card className="text-sm text-slate-600 dark:text-slate-400">No announcements.</Card>
         )}
         {announcements.data?.items.map((a) => (
           <Card key={a.id}>
             <p className="whitespace-pre-wrap text-sm">{a.content}</p>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
               {a.posted_by_name} · {new Date(a.created_at).toLocaleString()}
             </p>
           </Card>

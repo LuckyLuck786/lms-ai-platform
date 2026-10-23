@@ -125,7 +125,7 @@ export default function StudentDashboard() {
           </div>
         ) : enrollments.length === 0 ? (
           <Card className="text-center">
-            <p className="mb-4 text-slate-500">{t('dashboard.noCourses')}</p>
+            <p className="mb-4 text-slate-600 dark:text-slate-400">{t('dashboard.noCourses')}</p>
             <Link to="/catalog" className="btn-primary">{t('dashboard.browseCatalog')}</Link>
           </Card>
         ) : (
@@ -136,9 +136,9 @@ export default function StudentDashboard() {
                   <h3 className="font-semibold leading-snug">{e.title}</h3>
                   <span className="chip shrink-0 capitalize">{e.difficulty ?? t('course.allLevels')}</span>
                 </div>
-                <p className="mb-3 text-sm text-slate-500">{e.instructor_name}</p>
-                <ProgressBar percent={Number(e.progress_percent)} />
-                <p className="mt-1.5 text-xs text-slate-400">
+                <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">{e.instructor_name}</p>
+                <ProgressBar percent={Number(e.progress_percent)} label={t('dashboard.progressFor', { title: e.title })} />
+                <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
                   {t('dashboard.percentComplete', { value: Number(e.progress_percent) })}
                 </p>
               </Link>
@@ -157,8 +157,8 @@ export default function StudentDashboard() {
                   <h3 className="font-semibold leading-snug">{r.title}</h3>
                   <span className="chip shrink-0 nums">{Math.round(r.score)}% fit</span>
                 </div>
-                <p className="mt-1.5 text-xs text-slate-500">{r.reason}</p>
-                <p className="mt-2 text-xs text-slate-400">{r.instructor_name}</p>
+                <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">{r.reason}</p>
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">{r.instructor_name}</p>
               </Link>
             ))}
           </div>
@@ -183,7 +183,7 @@ export default function StudentDashboard() {
                       <h3 className="font-display text-lg leading-snug text-ink-950 dark:text-white">
                         {cert.course_title}
                       </h3>
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                         {t('dashboard.issuedOn', {
                           date: new Date(cert.issued_at).toLocaleDateString(),
                         })}

@@ -22,7 +22,9 @@ async function upsertUser(fullName: string, email: string, role: string): Promis
     userId = existing.id;
   } else {
     const row = await queryOne<{ id: string }>(
-      'INSERT INTO users (full_name, email, email_hash, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
+      // Demo inboxes do not exist, so demo accounts start verified.
+      `INSERT INTO users (full_name, email, email_hash, password_hash, email_verified_at)
+       VALUES ($1, $2, $3, $4, now()) RETURNING id`,
       [fullName, encryptPii(email), emailHash(email), password_hash],
     );
     userId = row!.id;

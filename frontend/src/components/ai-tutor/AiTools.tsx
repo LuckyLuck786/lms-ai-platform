@@ -107,7 +107,7 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
   return (
     <section aria-label={t('player.aiTools')} className="card">
       <h2 className="mb-3 flex items-center gap-2 font-semibold">
-        <Bot className="text-slate-400" />
+        <Bot className="text-slate-600 dark:text-slate-400" />
         {t('player.aiTools')}
       </h2>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
@@ -151,7 +151,7 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
           {cards.map((c, i) => (
             <div key={i} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
               <div className="font-medium">{t('ai.questionPrefix')} {c.question}</div>
-              <div className="mt-1 text-slate-500">{t('ai.answerPrefix')} {c.answer}</div>
+              <div className="mt-1 text-slate-600 dark:text-slate-400">{t('ai.answerPrefix')} {c.answer}</div>
             </div>
           ))}
         </div>
@@ -164,14 +164,14 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
       )}
 
       <div className="mt-4 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-        <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-caps text-slate-400">
-          <BarChart className="text-slate-400" />
+        <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-caps text-slate-600 dark:text-slate-400">
+          <BarChart className="text-slate-600 dark:text-slate-400" />
           {t('ai.topicMastery')}
         </h3>
         {mastery.isLoading ? (
           <Spinner className="h-4 w-4" />
         ) : (mastery.data?.items.length ?? 0) === 0 ? (
-          <p className="text-xs text-slate-400">{t('ai.masteryEmpty')}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{t('ai.masteryEmpty')}</p>
         ) : (
           <ul className="space-y-1.5">
             {mastery.data!.items.map((row) => {
@@ -193,7 +193,7 @@ export default function AiTools({ lectureId, moduleId, courseId }: Props) {
             })}
           </ul>
         )}
-        <p className="mt-1.5 text-[11px] text-slate-400">{t('ai.masteryHint')}</p>
+        <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-400">{t('ai.masteryHint')}</p>
       </div>
     </section>
   );

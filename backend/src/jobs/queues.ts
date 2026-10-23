@@ -11,6 +11,7 @@ import type { EmailCta, EmailKind } from '../services/email';
  *  - streaks: daily cron evaluating broken streaks platform-wide
  *  - recommendations: nightly cron recomputing every learner's suggestions
  *  - ingestion: chunk + embed new lecture material for RAG
+ *  - video: transcode lecture video to adaptive HLS for the CDN
  */
 
 // BullMQ requires maxRetriesPerRequest: null on its shared connection.
@@ -28,6 +29,7 @@ let masteryQueue: Queue | null = null;
 let transcriptionQueue: Queue | null = null;
 let recommendationQueue: Queue | null = null;
 let ingestionQueue: Queue | null = null;
+let videoQueue: Queue | null = null;
 
 export interface EmailJob {
   kind: EmailKind;
@@ -169,6 +171,32 @@ export async function queueIngestion(payload: { lectureId: string }): Promise<vo
   }
 }
 
+function getVideoQueue(): Queue {
+  videoQueue ??= new Queue('video', { connection: queueConnection() });
+  return videoQueue;
+}
+
+/**
+ * Transcode a lecture's video to HLS (PRD §9.4). The worker polls the
+ * Transcoder job by delaying itself, so one job covers the whole run.
+ */
+export async function queueVideo(payload: { lectureId: string }): Promise<void> {
+  try {
+    await getVideoQueue().add('transcode', payload, {
+      jobId: `video-${payload.lectureId}`,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 30_000 },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+  } catch (err) {
+    logger.warn('video_queue_failed', {
+      lecture_id: payload.lectureId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 function getRecommendationQueue(): Queue {
   recommendationQueue ??= new Queue('recommendations', { connection: queueConnection() });
   return recommendationQueue;
@@ -218,5 +246,6 @@ export async function closeQueues(): Promise<void> {
     transcriptionQueue?.close(),
     recommendationQueue?.close(),
     ingestionQueue?.close(),
+    videoQueue?.close(),
   ]);
 }

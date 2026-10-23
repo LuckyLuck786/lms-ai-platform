@@ -113,7 +113,7 @@ export default function CourseCatalog() {
           <SkeletonCard />
         </div>
       ) : query.data?.items?.length === 0 ? (
-        <Card className="text-center text-slate-500">{t('catalog.empty')}</Card>
+        <Card className="text-center text-slate-600 dark:text-slate-400">{t('catalog.empty')}</Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {query.data?.items.map((c) => {
@@ -135,7 +135,7 @@ export default function CourseCatalog() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center text-slate-400/60">
+                    <span className="flex h-full w-full items-center justify-center text-slate-600 dark:text-slate-400/60">
                       <GraduationCap size={26} />
                     </span>
                   )}
@@ -144,22 +144,22 @@ export default function CourseCatalog() {
                 <div className="flex flex-col p-4">
                   <div className="mb-1 flex items-center gap-2">
                     <span className="chip capitalize">{c.difficulty ?? t('course.allLevels')}</span>
-                    {c.category && <span className="text-[11px] text-slate-400">{c.category}</span>}
+                    {c.category && <span className="text-[11px] text-slate-600 dark:text-slate-400">{c.category}</span>}
                   </div>
                   <h2 className="font-semibold leading-snug text-ink-950 dark:text-white">{c.title}</h2>
                   {reviews > 0 ? (
                     <RatingStars value={rating} count={reviews} className="mt-1.5" />
                   ) : (
-                    <span className="mt-1.5 text-xs text-slate-400">{t('catalog.unrated')}</span>
+                    <span className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">{t('catalog.unrated')}</span>
                   )}
-                  <p className="mb-3 mt-1.5 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+                  <p className="mb-3 mt-1.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
                     {c.description ?? ''}
                   </p>
-                  <div className="mt-auto flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <div className="mt-auto flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                     <span>{c.instructor_name}</span>
                     <span className="font-semibold">{Number(c.price) > 0 ? `$${c.price}` : t('catalog.free')}</span>
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-400">
+                  <div className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
                     {t('catalog.enrolledCount', { count: c.enrollment_count ?? 0 })}
                   </div>
                 </div>
@@ -174,7 +174,7 @@ export default function CourseCatalog() {
           <button className="btn-secondary" disabled={page <= 1} onClick={() => update({ page: String(page - 1) })}>
             {t('catalog.previous')}
           </button>
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-slate-600 dark:text-slate-400">
             {t('catalog.pageOf', { page, total: totalPages })}
           </span>
           <button className="btn-secondary" disabled={page >= totalPages} onClick={() => update({ page: String(page + 1) })}>

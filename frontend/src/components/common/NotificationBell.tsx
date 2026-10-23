@@ -34,12 +34,13 @@ export default function NotificationBell() {
     <div className="relative">
       <button
         type="button"
-        aria-label={unread ? `${t('notifications.title')} (${unread})` : t('notifications.title')}
         onClick={() => setOpen((o) => !o)}
         className="relative rounded-lg border border-slate-300 p-2 text-slate-600 transition hover:bg-slate-100
           dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/[0.06]"
       >
         <Bell className="h-4 w-4" />
+        {/* Name comes from content, so the visible count is part of it (WCAG 2.5.3). */}
+        <span className="sr-only">{t('notifications.title')}</span>
         {unread > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-sm bg-red-800 px-1 text-[10px] font-semibold text-white nums">
             {unread > 9 ? '9+' : unread}
@@ -70,7 +71,7 @@ export default function NotificationBell() {
 
             {error && <p className="px-2 py-2 text-xs text-red-500">{apiErrorMessage(error)}</p>}
             {data?.items.length === 0 && (
-              <p className="px-2 py-3 text-xs text-slate-400">{t('notifications.empty')}</p>
+              <p className="px-2 py-3 text-xs text-slate-600 dark:text-slate-400">{t('notifications.empty')}</p>
             )}
 
             {data?.items.map((n) => (
@@ -87,8 +88,8 @@ export default function NotificationBell() {
                   {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-600" />}
                   <div>
                     <div className="font-medium">{n.title}</div>
-                    <div className="line-clamp-2 text-xs text-slate-500">{n.body}</div>
-                    <div className="mt-0.5 text-[10px] text-slate-400">
+                    <div className="line-clamp-2 text-xs text-slate-600 dark:text-slate-400">{n.body}</div>
+                    <div className="mt-0.5 text-[10px] text-slate-600 dark:text-slate-400">
                       {new Date(n.created_at).toLocaleString()}
                     </div>
                   </div>

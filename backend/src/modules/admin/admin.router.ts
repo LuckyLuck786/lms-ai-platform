@@ -6,6 +6,8 @@ import { notFound, badRequest } from '../../utils/errors';
 import { revokeAllRefreshTokens } from '../../utils/jwt';
 import { listPendingCourses } from '../courses/courses.service';
 import { pageEnvelope, parsePage } from '../../utils/pagination';
+import { lecturesNeedingVideo, videoPipelineEnabled } from '../../services/video';
+import { queueVideo } from '../../jobs/queues';
 import { logger } from '../../utils/logger';
 import { env } from '../../config/env';
 import { sendEmail, smtpConfigured, verifySmtp } from '../../services/email';
@@ -241,6 +243,26 @@ adminRouter.get(
       [pg.limit, pg.offset],
     );
     res.json(pageEnvelope(rows, pg));
+  }),
+);
+
+// --- Video streaming (PRD §9.4) ---------------------------------------------
+
+// POST /admin/videos/backfill — queue HLS transcoding for every lecture video
+// that has never been processed (or failed). Idempotent: jobs dedupe per lecture.
+adminRouter.post(
+  '/admin/videos/backfill',
+  wrap(async (req, res) => {
+    if (!videoPipelineEnabled()) {
+      res.status(409).json({
+        error: { code: 'VIDEO_PIPELINE_DISABLED', message: 'VIDEO_BUCKET / VIDEO_CDN_BASE are not configured' },
+      });
+      return;
+    }
+    const ids = await lecturesNeedingVideo();
+    for (const lectureId of ids) await queueVideo({ lectureId });
+    await audit(req.user!.id, 'video_backfill', 'lecture', null, { queued: ids.length });
+    res.json({ queued: ids.length });
   }),
 );
 

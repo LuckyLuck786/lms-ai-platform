@@ -25,6 +25,7 @@ import { announcementsRouter } from './modules/announcements/announcements.route
 import { notificationsRouter } from './modules/notifications/notifications.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { paymentsRouter } from './modules/payments/payments.router';
+import { accountRouter } from './modules/account/account.router';
 import { storageDriver, streamStoredFile } from './utils/storage';
 
 export function createApp(): express.Express {
@@ -98,6 +99,7 @@ export function createApp(): express.Express {
   // All /api/v1 endpoints except /auth/* and public catalog require a JWT.
   // Routers mounted first carry their own per-route guards (incl. the public
   // catalog's optional auth), so the blanket authenticate runs after them.
+  app.use('/api/v1', accountRouter);
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/courses', coursesRouter);
   app.use('/api/v1/modules', modulesRouter);

@@ -52,7 +52,7 @@ export default function VerifyCertificate() {
       <div className="rounded-md border border-gold-400/60 p-1.5">
         <div className="rounded-sm border border-slate-300/80 bg-paper-card px-6 py-10 text-center sm:px-12 dark:border-white/15 dark:bg-ink-900">
           {isLoading && (
-            <div className="flex flex-col items-center gap-3 py-10 text-slate-500">
+            <div className="flex flex-col items-center gap-3 py-10 text-slate-600 dark:text-slate-400">
               <Spinner />
               <p className="text-sm">{t('verify.checking')}</p>
             </div>
@@ -66,7 +66,7 @@ export default function VerifyCertificate() {
               <h1 className="font-display text-2xl text-ink-950 dark:text-white">
                 {t('verify.notFoundTitle')}
               </h1>
-              <p className="max-w-md text-sm text-slate-500 dark:text-slate-400">
+              <p className="max-w-md text-sm text-slate-600 dark:text-slate-400">
                 {t('verify.notFoundBody')}
               </p>
             </div>
@@ -83,7 +83,7 @@ export default function VerifyCertificate() {
                 <p className="font-display text-4xl text-ink-950 dark:text-white">
                   {data.student_name}
                 </p>
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
                   {t('verify.completed')}
                 </p>
                 <p className="mt-2 font-display text-xl text-ink-800 dark:text-slate-200">
@@ -93,7 +93,7 @@ export default function VerifyCertificate() {
 
               {meta}
 
-              <p className="mt-6 text-xs text-slate-400">{t('verify.confirm')}</p>
+              <p className="mt-6 text-xs text-slate-600 dark:text-slate-400">{t('verify.confirm')}</p>
             </>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { query, queryOne } from '../../db/pool';
-import { queueIngestion, queueTranscription } from '../../jobs/queues';
+import { queueIngestion, queueTranscription, queueVideo } from '../../jobs/queues';
 import { cacheDel, cacheGet, cacheSet } from '../../db/redis';
 import { badRequest, forbidden, notFound } from '../../utils/errors';
 import { AuthUser, hasRole } from '../../middleware/auth';
@@ -131,7 +131,7 @@ async function loadCourseStructure(id: string, includeDrafts: boolean): Promise<
   const moduleIds = modules.map((m) => (m as { id: string }).id);
   const lectures = moduleIds.length
     ? await query(
-        `SELECT id, module_id, title, video_url, duration_seconds, order_index, resource_urls
+        `SELECT id, module_id, title, video_url, hls_url, duration_seconds, order_index, resource_urls
          FROM lectures WHERE module_id = ANY($1) ORDER BY order_index, title`,
         [moduleIds],
       )
@@ -474,6 +474,9 @@ export async function addLecture(user: AuthUser, moduleId: string, input: Create
     // worker. It persists the transcript and then runs ingestion itself.
     void queueTranscription({ lectureId: (lecture as { id: string }).id });
   }
+  // Adaptive HLS for the CDN (PRD §9.4); the worker skips it when the video
+  // pipeline is not configured, so local development is unaffected.
+  if (lecture && input.video_url) void queueVideo({ lectureId: (lecture as { id: string }).id });
   return lecture;
 }
 

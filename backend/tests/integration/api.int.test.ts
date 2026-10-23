@@ -3,7 +3,8 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { pool, query } from '../../src/db/pool';
 import { redis } from '../../src/db/redis';
-import { closeQueues } from '../../src/jobs/queues';
+import { Queue } from 'bullmq';
+import { closeQueues, queueConnection } from '../../src/jobs/queues';
 
 /**
  * Integration suite: the real app against a real, freshly migrated and seeded
@@ -22,10 +23,10 @@ const api = () => {
   const agent = request(app);
   const ip = nextIp();
   const wrap =
-    (method: 'get' | 'post' | 'put' | 'delete') =>
+    (method: 'get' | 'post' | 'put' | 'patch' | 'delete') =>
     (url: string) =>
       agent[method](url).set('x-forwarded-for', ip);
-  return { get: wrap('get'), post: wrap('post'), put: wrap('put'), delete: wrap('delete') };
+  return { get: wrap('get'), post: wrap('post'), put: wrap('put'), patch: wrap('patch'), delete: wrap('delete') };
 };
 const PASSWORD = 'DemoPass123!';
 
@@ -105,6 +106,103 @@ describe('PII encryption at rest (NFR §6)', () => {
       .get('/api/v1/admin/users?q=student@vertexon.demo')
       .set('authorization', `Bearer ${token}`);
     expect(res.body.items.map((u: { email: string }) => u.email)).toEqual(['student@vertexon.demo']);
+  });
+});
+
+/** Pull the newest verification link for `to` out of the real email queue. */
+async function latestVerificationToken(to: string): Promise<string> {
+  const q = new Queue('notifications', { connection: queueConnection() });
+  try {
+    for (let i = 0; i < 20; i++) {
+      const jobs = await q.getJobs(['waiting', 'delayed', 'completed', 'failed', 'active']);
+      const hit = jobs
+        .filter((j) => j.data?.kind === 'account' && j.data.recipients?.includes(to))
+        .sort((a, b) => b.timestamp - a.timestamp)[0];
+      const token = hit?.data.cta?.path?.split('token=')[1];
+      if (token) return token;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error(`no verification email queued for ${to}`);
+  } finally {
+    await q.close();
+  }
+}
+
+describe('accounts and email verification', () => {
+  const email = `acct-${Date.now()}@example.com`;
+  let token = '';
+
+  it('registers unverified and queues a verification email to that address', async () => {
+    const res = await api()
+      .post('/api/v1/auth/register')
+      .send({ full_name: 'Account Tester', email, password: 'SecurePass123!' });
+    expect(res.status).toBe(201);
+    expect(res.body.user.email_verified).toBe(false);
+    token = res.body.access_token;
+  });
+
+  it('verifies through the emailed link, which then cannot be reused', async () => {
+    const link = await latestVerificationToken(email);
+    const ok = await api().post('/api/v1/auth/verify-email').send({ token: link });
+    expect(ok.status).toBe(200);
+    const me = await api().get('/api/v1/auth/me').set('authorization', `Bearer ${token}`);
+    expect(me.body.email_verified).toBe(true);
+    expect((await api().post('/api/v1/auth/verify-email').send({ token: link })).status).toBe(400);
+  });
+
+  it('updates name and phone, and stores the phone encrypted', async () => {
+    const res = await api()
+      .patch('/api/v1/users/me')
+      .set('authorization', `Bearer ${token}`)
+      .send({ full_name: 'Renamed Tester', phone: '+91 98765 43210' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ full_name: 'Renamed Tester', phone: '+91 98765 43210' });
+    const row = await query<{ phone: string }>('SELECT phone FROM users WHERE id = $1', [res.body.id]);
+    expect(row[0].phone.startsWith('v1:')).toBe(true);
+  });
+
+  it('changes the password only with the current one', async () => {
+    const bad = await api()
+      .put('/api/v1/users/me/password')
+      .set('authorization', `Bearer ${token}`)
+      .send({ current_password: 'wrong', new_password: 'BrandNewPass456!' });
+    expect(bad.status).toBe(401);
+    const ok = await api()
+      .put('/api/v1/users/me/password')
+      .set('authorization', `Bearer ${token}`)
+      .send({ current_password: 'SecurePass123!', new_password: 'BrandNewPass456!' });
+    expect(ok.status).toBe(200);
+    const login = await api().post('/api/v1/auth/login').send({ email, password: 'BrandNewPass456!' });
+    expect(login.status).toBe(200);
+  });
+
+  it('changes the email only after the new address confirms', async () => {
+    const next = `moved-${Date.now()}@example.com`;
+    const start = await api()
+      .post('/api/v1/users/me/email')
+      .set('authorization', `Bearer ${token}`)
+      .send({ new_email: next, password: 'BrandNewPass456!' });
+    expect(start.status).toBe(200);
+    // Not switched yet: the old address still signs in.
+    expect((await api().post('/api/v1/auth/login').send({ email, password: 'BrandNewPass456!' })).status).toBe(200);
+
+    const link = await latestVerificationToken(next);
+    expect((await api().post('/api/v1/auth/verify-email').send({ token: link })).status).toBe(200);
+    expect((await api().post('/api/v1/auth/login').send({ email: next, password: 'BrandNewPass456!' })).status).toBe(200);
+    expect((await api().post('/api/v1/auth/login').send({ email, password: 'BrandNewPass456!' })).status).toBe(401);
+  });
+
+  it('refuses an email change to an address another account owns', async () => {
+    const res = await api()
+      .post('/api/v1/users/me/email')
+      .set('authorization', `Bearer ${token}`)
+      .send({ new_email: 'student@vertexon.demo', password: 'BrandNewPass456!' });
+    expect(res.status).toBe(409);
+  });
+
+  it('treats seeded demo accounts as verified', async () => {
+    const res = await api().post('/api/v1/auth/login').send({ email: 'student@vertexon.demo', password: PASSWORD });
+    expect(res.body.user.email_verified).toBe(true);
   });
 });
 

@@ -251,7 +251,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
       {error && <Alert>{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
 
-      {noCourse && <Card className="text-slate-500">{t('tools.selectPrompt')}</Card>}
+      {noCourse && <Card className="text-slate-600 dark:text-slate-400">{t('tools.selectPrompt')}</Card>}
 
       {!noCourse && (
         <>
@@ -349,7 +349,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
           {/* Attach material to an existing lecture (FR-I2) */}
           <Card>
             <h3 className="mb-3 font-semibold">{t('tools.attachMaterial')}</h3>
-            <p className="mb-3 text-sm text-slate-500">{t('tools.attachHint')}</p>
+            <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">{t('tools.attachHint')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <select
                 className="input"
@@ -379,7 +379,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
               {uploadResources.isPending ? t('common.uploading') : t('tools.uploadMaterial')}
             </button>
             {!lectures.length && (
-              <p className="mt-2 text-sm text-slate-500">{t('tools.noLecturesYet')}</p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t('tools.noLecturesYet')}</p>
             )}
           </Card>
 
@@ -467,7 +467,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                       ))}
                       {q.options.length < 6 && (
                         <button
-                          className="text-sm text-brand-600 hover:underline"
+                          className="text-sm text-brand-600 hover:underline dark:text-brand-300"
                           onClick={() =>
                             setQuestion(qi, {
                               options: [...q.options, { option_text: '', is_correct: false }],
@@ -527,7 +527,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
             <div className="mt-4">
               <p className="eyebrow mb-2">{t('tools.rubric')}</p>
               {rubric.length === 0 && (
-                <p className="mb-2 text-xs text-slate-400">{t('tools.rubricHint')}</p>
+                <p className="mb-2 text-xs text-slate-600 dark:text-slate-400">{t('tools.rubricHint')}</p>
               )}
               <ul className="space-y-2">
                 {rubric.map((row, i) => (
@@ -552,7 +552,7 @@ export default function InstructorContentTools({ courses }: { courses: Course[] 
                     <button
                       type="button"
                       aria-label={t('common.delete')}
-                      className="text-slate-400 transition hover:text-red-500"
+                      className="text-slate-600 dark:text-slate-400 transition hover:text-red-500"
                       onClick={() => setRubric((rows) => rows.filter((_, idx) => idx !== i))}
                     >
                       <X className="h-4 w-4" />

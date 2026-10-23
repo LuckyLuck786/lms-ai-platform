@@ -11,6 +11,7 @@ import {
 import { badRequest, conflict, unauthorized, forbidden, notFound } from '../../utils/errors';
 import { LoginInput, RegisterInput } from './auth.schemas';
 import { decryptPii, emailHash, encryptPii, normaliseEmail } from '../../utils/pii';
+import { sendSignupVerification } from '../account/account.service';
 
 export interface UserRow {
   id: string;
@@ -19,6 +20,8 @@ export interface UserRow {
   password_hash: string;
   avatar_url: string | null;
   is_active: boolean;
+  phone: string | null;
+  email_verified_at: Date | null;
 }
 
 export interface PublicUser {
@@ -26,6 +29,8 @@ export interface PublicUser {
   full_name: string;
   email: string;
   avatar_url: string | null;
+  phone: string | null;
+  email_verified: boolean;
   role: Role;
   roles: Role[];
 }
@@ -51,6 +56,8 @@ export async function toPublicUser(user: UserRow): Promise<PublicUser> {
     full_name: user.full_name,
     email: decryptPii(user.email),
     avatar_url: user.avatar_url,
+    phone: decryptPii(user.phone),
+    email_verified: !!user.email_verified_at,
     role: roles[0] ?? 'student',
     roles: roles.length ? roles : ['student'],
   };
@@ -91,6 +98,8 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
     return user.rows[0];
   });
 
+  // Verification email goes out through the queue; signing in does not wait for it.
+  await sendSignupVerification(full.id, normaliseEmail(input.email));
   return issueTokens(full);
 }
 

@@ -35,7 +35,7 @@ export default function AdminDashboard() {
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
               tab === item.id
                 ? 'border-brand-600 text-brand-700 dark:text-brand-100'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                : 'border-transparent text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             {t(item.labelKey)}
@@ -84,7 +84,7 @@ function Overview() {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {metrics.map((m) => (
         <Card key={m.label}>
-          <div className="text-xs uppercase text-slate-400">{m.label}</div>
+          <div className="text-xs uppercase text-slate-600 dark:text-slate-400">{m.label}</div>
           <div className="mt-1 text-2xl font-bold">{m.value}</div>
         </Card>
       ))}
@@ -149,7 +149,7 @@ function Users() {
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-400 dark:border-slate-800">
+              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-600 dark:text-slate-400 dark:border-slate-800">
                 <th className="px-4 py-3">{t('admin.user')}</th>
                 <th className="px-4 py-3">{t('admin.role')}</th>
                 <th className="px-4 py-3">{t('admin.enrolments')}</th>
@@ -162,7 +162,7 @@ function Users() {
                 <tr key={u.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
                   <td className="px-4 py-3">
                     <div className="font-medium">{u.full_name}</div>
-                    <div className="text-xs text-slate-400">{u.email}</div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400">{u.email}</div>
                   </td>
                   <td className="px-4 py-3">
                     <select
@@ -240,19 +240,19 @@ function Approvals() {
     <div className="space-y-4">
       {message && <Alert>{message}</Alert>}
       {queue.data?.items.length === 0 && (
-        <Card className="text-slate-500">{t('admin.approvalsEmpty')}</Card>
+        <Card className="text-slate-600 dark:text-slate-400">{t('admin.approvalsEmpty')}</Card>
       )}
       {queue.data?.items.map((c) => (
         <Card key={c.id}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="font-semibold">{c.title}</h3>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
                 {t('course.by', { name: c.instructor_name ?? '' })} ·{' '}
                 {c.category ?? t('admin.uncategorized')} · {c.difficulty ?? t('course.allLevels')} ·{' '}
                 {t('admin.moduleCount', { count: c.module_count })}
               </p>
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500">{c.description}</p>
+              <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">{c.description}</p>
             </div>
             <div className="flex gap-2">
               <button className="btn-primary" onClick={() => decide.mutate({ id: c.id, decision: 'approved' })}>
@@ -313,14 +313,14 @@ function Moderation() {
       {flagged.isLoading ? (
         <div className="flex justify-center py-10"><Spinner /></div>
       ) : flagged.data?.items.length === 0 ? (
-        <Card className="text-slate-500">{t('admin.flaggedEmpty')}</Card>
+        <Card className="text-slate-600 dark:text-slate-400">{t('admin.flaggedEmpty')}</Card>
       ) : (
         flagged.data?.items.map((p) => (
           <Card key={p.id}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm">{p.content}</p>
-                <p className="mt-2 text-xs text-slate-400">
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
                   {p.author_name} in “{p.thread_title}” ({p.course_title}) ·{' '}
                   {new Date(p.created_at).toLocaleString()}
                 </p>

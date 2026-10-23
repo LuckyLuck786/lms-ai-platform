@@ -127,7 +127,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
       </div>
 
       {mode === 'auto' && depth && (
-        <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
           <Target className="h-3.5 w-3.5 shrink-0" />
           {t('ai.depthAdjusted', { depth: t(`player.mode.${depth}`) })}
         </p>
@@ -138,7 +138,7 @@ export default function AiTutorPanel({ courseId }: { courseId: string }) {
       <div className="mb-3 flex-1 space-y-3 overflow-y-auto pr-1">
         {messages.isLoading && <div className="flex justify-center py-6"><Spinner /></div>}
         {items.length === 0 && !messages.isLoading && (
-          <p className="text-sm text-slate-400">{t('player.askAnything')}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{t('player.askAnything')}</p>
         )}
         {items.map((m) => (
           <div

@@ -146,7 +146,7 @@ export default function InstructorDashboard() {
               </Link>
             ))}
             {myCourses.data?.items.length === 0 && (
-              <Card className="text-slate-500">{t('instructor.firstCourse')}</Card>
+              <Card className="text-slate-600 dark:text-slate-400">{t('instructor.firstCourse')}</Card>
             )}
           </div>
         )}

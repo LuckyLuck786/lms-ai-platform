@@ -5,6 +5,8 @@ export interface User {
   full_name: string;
   email: string;
   avatar_url: string | null;
+  phone?: string | null;
+  email_verified?: boolean;
   role: Role;
   roles: Role[];
 }
@@ -37,6 +39,8 @@ export interface Lecture {
   module_id: string;
   title: string;
   video_url: string | null;
+  /** Adaptive HLS manifest on the CDN, once transcoding finishes (PRD §9.4). */
+  hls_url?: string | null;
   transcript?: string | null;
   duration_seconds: number | null;
   order_index: number;
@@ -49,7 +53,15 @@ export interface CourseModule {
   title: string;
   order_index: number;
   lectures: Lecture[];
-  quizzes: { id: string; module_id: string; title: string; question_count: number }[];
+  quizzes: {
+    id: string;
+    module_id: string;
+    title: string;
+    question_count: number;
+    /** 'draft' = AI-generated, awaiting instructor review (FR-A5, FR-I4). */
+    status?: 'draft' | 'published';
+    is_ai_generated?: boolean;
+  }[];
 }
 
 export interface CourseDetail extends Course {

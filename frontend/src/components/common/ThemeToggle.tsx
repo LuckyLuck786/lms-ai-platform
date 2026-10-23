@@ -23,7 +23,9 @@ export default function ThemeToggle() {
       type="button"
       onClick={() => setDark((d) => !d)}
       aria-pressed={dark}
-      aria-label={t('theme.toggle')}
+      // No aria-label: the visible "Light"/"Dark" text is the accessible name
+      // (WCAG 2.5.3 label-in-name); the tooltip keeps the longer description.
+      title={t('theme.toggle')}
       className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm transition
         hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/[0.06]"
     >

@@ -38,6 +38,12 @@ export default function CourseDetail() {
     enabled: !!id,
   });
 
+  // FR-I4: the course owner publishes an AI-generated draft after review.
+  const approveQuiz = useMutation({
+    mutationFn: async (quizId: string) => (await api.put(`/quizzes/${quizId}/approve`)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['course', id] }),
+  });
+
   const assignments = useQuery({
     queryKey: ['assignments', id],
     queryFn: async () => (await api.get<{ items: Assignment[] }>(`/courses/${id}/assignments`)).data,
@@ -170,7 +176,7 @@ export default function CourseDetail() {
               {summary.count > 0 && <RatingStars value={summary.average} count={summary.count} />}
             </div>
             <h1 className="font-display text-3xl leading-tight text-ink-950 dark:text-white">{c.title}</h1>
-            <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
               {t('course.by', { name: c.instructor_name ?? '' })}
               {c.category ? ` · ${c.category}` : ''}
             </p>
@@ -227,10 +233,10 @@ export default function CourseDetail() {
             <span className="font-display text-4xl text-ink-950 nums dark:text-white">
               {summary.count > 0 ? summary.average.toFixed(1) : 'n/a'}
             </span>
-            <span className="text-sm text-slate-400">/ 5</span>
+            <span className="text-sm text-slate-600 dark:text-slate-400">/ 5</span>
           </div>
           <RatingStars value={summary.average} className="mt-1" />
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
             {t('course.ratingCount', { count: summary.count })}
           </p>
 
@@ -271,7 +277,7 @@ export default function CourseDetail() {
               )}
             </div>
           ) : (
-            <p className="mt-4 border-t border-slate-200/80 pt-4 text-xs text-slate-400 dark:border-white/[0.06]">
+            <p className="mt-4 border-t border-slate-200/80 pt-4 text-xs text-slate-600 dark:text-slate-400 dark:border-white/[0.06]">
               {user ? t('course.rateAfterEnrol') : t('course.loginToRate')}
             </p>
           )}
@@ -280,7 +286,7 @@ export default function CourseDetail() {
         <Card>
           <h2 className="mb-3 font-semibold">{t('course.reviews')}</h2>
           {summary.items.length === 0 ? (
-            <p className="text-sm text-slate-500">{t('course.noReviews')}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">{t('course.noReviews')}</p>
           ) : (
             <ul className="divide-quiet space-y-4">
               {summary.items.slice(0, 5).map((r, i) => (
@@ -290,7 +296,7 @@ export default function CourseDetail() {
                     <RatingStars value={r.rating} />
                   </div>
                   {r.comment && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{r.comment}</p>}
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                     {new Date(r.updated_at).toLocaleDateString()}
                   </p>
                 </li>
@@ -323,15 +329,28 @@ export default function CourseDetail() {
               <Card key={q.id} className="flex items-center justify-between">
                 <div>
                   <span className="flex items-center gap-2 font-medium">
-                    <ClipboardCheck className="h-4 w-4 text-slate-400" />
+                    <ClipboardCheck className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                     {q.title}
+                    {q.status === 'draft' && <span className="chip">{t('course.quizDraft')}</span>}
                   </span>
-                  <span className="ml-2 text-sm text-slate-400">
+                  <span className="ml-2 text-sm text-slate-600 dark:text-slate-400">
                     {t('course.questions', { count: q.question_count })}
                   </span>
-                  <div className="text-xs text-slate-400">{m.title}</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400">{m.title}</div>
                 </div>
-                {user ? (
+                {q.status === 'draft' && (isOwner || user?.roles.includes('admin')) ? (
+                  <div className="flex gap-2">
+                    <Link to={`/quiz/${q.id}`} className="btn-secondary">{t('course.reviewQuiz')}</Link>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={approveQuiz.isPending}
+                      onClick={() => approveQuiz.mutate(q.id)}
+                    >
+                      {t('course.approveQuiz')}
+                    </button>
+                  </div>
+                ) : user ? (
                   <Link to={`/quiz/${q.id}`} className="btn-secondary">{t('course.openQuiz')}</Link>
                 ) : (
                   <Link to="/login" className="btn-secondary">{t('course.logIn')}</Link>
@@ -346,7 +365,7 @@ export default function CourseDetail() {
       <section aria-label={t('assignments.title')} className="space-y-3">
         <h2 className="text-lg font-semibold">{t('assignments.title')}</h2>
         {assignments.data?.items.length === 0 && (
-          <Card className="text-slate-500">{t('assignments.noAssignments')}</Card>
+          <Card className="text-slate-600 dark:text-slate-400">{t('assignments.noAssignments')}</Card>
         )}
         {assignments.data?.items.map((a) => (
           <AssignmentCard key={a.id} assignment={a} canSubmit={!!user?.roles.includes('student')} />
@@ -355,7 +374,7 @@ export default function CourseDetail() {
 
       <section aria-label={t('course.courseContent')} className="space-y-4">
         <h2 className="text-lg font-semibold">{t('course.courseContent')}</h2>
-        {c.modules.length === 0 && <Card className="text-slate-500">{t('course.noModules')}</Card>}
+        {c.modules.length === 0 && <Card className="text-slate-600 dark:text-slate-400">{t('course.noModules')}</Card>}
         {c.modules.map((m) => (
           <Card key={m.id}>
             <h3 className="font-semibold">{m.title}</h3>
@@ -363,10 +382,10 @@ export default function CourseDetail() {
               {m.lectures.map((l) => (
                 <li key={l.id} className="flex items-center justify-between py-2 text-sm">
                   <span className="flex items-center gap-2">
-                    <Video className="h-4 w-4 shrink-0 text-slate-400" />
+                    <Video className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-400" />
                     {l.title}
                   </span>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-600 dark:text-slate-400">
                     {l.duration_seconds
                       ? t('course.minutes', { count: Math.round(l.duration_seconds / 60) })
                       : ''}
@@ -374,7 +393,7 @@ export default function CourseDetail() {
                 </li>
               ))}
               {m.lectures.length === 0 && (
-                <li className="py-2 text-sm text-slate-400">{t('course.noLectures')}</li>
+                <li className="py-2 text-sm text-slate-600 dark:text-slate-400">{t('course.noLectures')}</li>
               )}
             </ul>
           </Card>
@@ -382,7 +401,7 @@ export default function CourseDetail() {
       </section>
 
       {isOwner && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-600 dark:text-slate-400">
           {t('course.ownerHint')}{' '}
           <Link to="/instructor" className="underline">{t('course.instructorWorkspace')}</Link>
         </p>
@@ -423,15 +442,15 @@ function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; can
         <div>
           <h3 className="font-medium">{assignment.title}</h3>
           {assignment.instructions && (
-            <p className="mt-1 text-sm text-slate-500">{assignment.instructions}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{assignment.instructions}</p>
           )}
           {assignment.due_date && (
-            <p className={`mt-1 text-xs ${late && !assignment.my_submission_id ? 'text-red-500' : 'text-slate-400'}`}>
+            <p className={`mt-1 text-xs ${late && !assignment.my_submission_id ? 'text-red-500' : 'text-slate-600 dark:text-slate-400'}`}>
               {t('assignments.due', { date: new Date(assignment.due_date).toLocaleString() })}
             </p>
           )}
           {assignment.my_submission_id && (
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
               {t('assignments.submittedOn', {
                 date: assignment.my_submitted_at
                   ? new Date(assignment.my_submitted_at).toLocaleString()
@@ -465,7 +484,7 @@ function AssignmentCard({ assignment, canSubmit }: { assignment: Assignment; can
           </div>
         )}
       </div>
-      {msg && <p className="mt-2 text-xs text-slate-500">{msg}</p>}
+      {msg && <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">{msg}</p>}
     </Card>
   );
 }

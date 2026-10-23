@@ -95,7 +95,7 @@ export default function QuizTake() {
             {result.score === null ? '—' : `${result.score}%`}
           </div>
           {result.score !== null && (
-            <p className="text-slate-500">
+            <p className="text-slate-600 dark:text-slate-400">
               {result.score >= 70 ? `${t('quiz.passed')}!` : t('quiz.keepPractising')}
             </p>
           )}
@@ -118,7 +118,7 @@ export default function QuizTake() {
                   <span
                     className={
                       outcome?.is_correct === null
-                        ? 'text-slate-400'
+                        ? 'text-slate-600 dark:text-slate-400'
                         : outcome?.is_correct
                           ? 'text-emerald-800 dark:text-emerald-400'
                           : 'text-red-500'
@@ -145,7 +145,7 @@ export default function QuizTake() {
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{quiz.data.title}</h1>
-        <span className="text-sm text-slate-500">
+        <span className="text-sm text-slate-600 dark:text-slate-400">
           {t('quiz.answered', {
             answered: answeredCount,
             total: quiz.data.questions.length,

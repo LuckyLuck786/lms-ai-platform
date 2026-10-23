@@ -93,7 +93,7 @@ export function RatingStars({
         )}
       </span>
       {count ? (
-        <span className="text-xs text-slate-500 dark:text-slate-400">
+        <span className="text-xs text-slate-600 dark:text-slate-400">
           {value.toFixed(1)} ({count})
         </span>
       ) : null}
@@ -142,12 +142,13 @@ export function RatingInput({
   );
 }
 
-export function ProgressBar({ percent }: { percent: number }) {
+export function ProgressBar({ percent, label }: { percent: number; label: string }) {
   const value = Math.max(0, Math.min(100, percent));
   return (
     <div
       className="h-1.5 w-full overflow-hidden rounded-sm bg-slate-300/70 dark:bg-white/10"
       role="progressbar"
+      aria-label={label}
       aria-valuenow={Math.round(value)}
       aria-valuemin={0}
       aria-valuemax={100}

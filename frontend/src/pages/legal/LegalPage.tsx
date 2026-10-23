@@ -22,7 +22,7 @@ export function LegalPage({
     <div className="mx-auto max-w-3xl">
       <p className="eyebrow mb-1">{t('legal.title')}</p>
       <h1 className="font-display text-3xl text-ink-950 dark:text-white">{title}</h1>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('legal.updated')}</p>
+      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{t('legal.updated')}</p>
       <p className="mt-5 text-slate-700 dark:text-slate-300">{intro}</p>
 
       <div className="mt-8 space-y-7 text-sm leading-relaxed text-slate-700 dark:text-slate-300">

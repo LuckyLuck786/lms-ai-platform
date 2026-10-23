@@ -79,7 +79,7 @@ export default function Login() {
             {mutation.isPending ? t('auth.loggingIn') : t('auth.login')}
           </button>
         </form>
-        <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+        <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
           {t('auth.noAccount')}{' '}
           <Link to="/register" className="link-quiet">
             {t('auth.register')}
@@ -103,18 +103,18 @@ export default function Login() {
               >
                 <span className="min-w-0">
                   <span className="font-medium">{account.label}</span>
-                  <span className="ml-2 text-xs text-slate-400">{account.email}</span>
+                  <span className="ml-2 text-xs text-slate-600 dark:text-slate-400">{account.email}</span>
                 </span>
-                <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">
+                <span className="hidden shrink-0 text-xs text-slate-600 dark:text-slate-400 sm:inline">
                   {account.hint}
                 </span>
               </button>
             ))}
           </div>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
             {t('auth.demoPassword')} <code className="font-mono">{DEMO_PASSWORD}</code>
           </p>
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-3 text-xs text-slate-600 dark:text-slate-400">
             {t('auth.browsePublic')}{' '}
             <Link to="/catalog" className="link-quiet">{t('nav.catalog')}</Link>
           </p>

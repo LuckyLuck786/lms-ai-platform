@@ -90,6 +90,17 @@ export const env = {
     hashKey: secret('PII_HASH_KEY', 'dev-only-pii-hash-key-change-me'),
   },
 
+  // Adaptive video streaming (PRD §9.4, §13): lecture videos are transcoded to
+  // HLS by the Transcoder API into a public video-only bucket served through
+  // Cloud CDN. Disabled unless all three are set; lectures then play the
+  // original file.
+  video: {
+    bucket: process.env.VIDEO_BUCKET ?? '',
+    cdnBase: (process.env.VIDEO_CDN_BASE ?? '').replace(/\/+$/, ''),
+    project: process.env.GOOGLE_CLOUD_PROJECT ?? '',
+    location: process.env.TRANSCODER_LOCATION ?? 'us-central1',
+  },
+
   // Durable object storage for uploaded material. When GCS_BUCKET is set the
   // storage driver writes to Google Cloud Storage using the runtime service
   // account (Application Default Credentials) instead of the container disk,

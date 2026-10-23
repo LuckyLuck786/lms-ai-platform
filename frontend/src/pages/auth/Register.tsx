@@ -96,9 +96,9 @@ export default function Register() {
             {mutation.isPending ? t('auth.creating') : t('auth.register')}
           </button>
         </form>
-        <p className="mt-4 text-sm text-slate-500">
+        <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
           {t('auth.alreadyRegistered')}{' '}
-          <Link to="/login" className="font-medium text-brand-600 hover:underline">
+          <Link to="/login" className="font-medium text-brand-600 hover:underline dark:text-brand-300">
             {t('auth.login')}
           </Link>
         </p>

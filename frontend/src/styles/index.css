@@ -50,8 +50,8 @@
   }
   .input {
     @apply w-full rounded-md border border-slate-300 bg-paper-card px-3 py-2 text-sm outline-none transition
-      placeholder:text-slate-400 focus:border-brand-600 focus:ring-1 focus:ring-brand-600/30
-      dark:border-white/15 dark:bg-ink-900 dark:placeholder:text-slate-500;
+      placeholder:text-slate-500 focus:border-brand-600 focus:ring-1 focus:ring-brand-600/30
+      dark:border-white/15 dark:bg-ink-900 dark:placeholder:text-slate-400;
   }
   .label {
     @apply mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300;
@@ -68,7 +68,7 @@
   }
   /* Tracked small-caps label — the printed-report alternative to badges. */
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-caps text-slate-500 dark:text-slate-400;
+    @apply text-[11px] font-semibold uppercase tracking-caps text-slate-600 dark:text-slate-400;
   }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-sm border border-slate-300 bg-transparent px-2 py-0.5
@@ -86,7 +86,7 @@
     @apply border-t border-slate-200 dark:border-white/[0.07];
   }
   .link-quiet {
-    @apply text-slate-500 underline-offset-4 transition-colors hover:text-brand-700 hover:underline
+    @apply text-slate-600 underline-offset-4 transition-colors hover:text-brand-700 hover:underline
       dark:text-slate-400 dark:hover:text-brand-300;
   }
   /* Loading placeholders instead of a spinner floating in empty space. */

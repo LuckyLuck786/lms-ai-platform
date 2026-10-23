@@ -173,6 +173,44 @@ export default function CoursePlayer() {
     if (videoRef.current) videoRef.current.playbackRate = speed;
   }, [speed]);
 
+  // Adaptive streaming (PRD §9.4): play the CDN's HLS manifest when the lecture
+  // has one. Safari plays HLS natively; elsewhere hls.js (loaded on demand)
+  // feeds the <video> element. Any fatal stream error falls back to the
+  // original file, so a CDN hiccup never leaves the learner with no video.
+  const hlsUrl = lecture?.hls_url ?? null;
+  const fallbackUrl = lecture?.video_url ? mediaUrl(lecture.video_url) : '';
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !hlsUrl) return;
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsUrl;
+      return;
+    }
+    let destroyed = false;
+    let hls: import('hls.js').default | null = null;
+    void import('hls.js').then(({ default: Hls }) => {
+      if (destroyed) return;
+      if (!Hls.isSupported()) {
+        video.src = fallbackUrl;
+        return;
+      }
+      hls = new Hls();
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          hls?.destroy();
+          hls = null;
+          video.src = fallbackUrl;
+        }
+      });
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+    });
+    return () => {
+      destroyed = true;
+      hls?.destroy();
+    };
+  }, [hlsUrl, fallbackUrl, lecture?.id]);
+
   const seekTo = (seconds: number) => {
     if (videoRef.current) videoRef.current.currentTime = seconds;
     setNoteAt(seconds);
@@ -227,7 +265,7 @@ export default function CoursePlayer() {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
-        <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
+        <nav aria-label="Breadcrumb" className="text-sm text-slate-600 dark:text-slate-400">
           <Link to={`/catalog/${courseId}`} className="hover:underline">{course.data?.title}</Link>
           <span className="mx-2">/</span>
           <span>{lecture.title}</span>
@@ -237,7 +275,7 @@ export default function CoursePlayer() {
           <video
             ref={videoRef}
             key={lecture.id}
-            src={mediaUrl(lecture.video_url)}
+            src={lecture.hls_url ? undefined : mediaUrl(lecture.video_url)}
             controls
             preload="metadata"
             onLoadedMetadata={onLoadedMetadata}
@@ -246,15 +284,15 @@ export default function CoursePlayer() {
             Your browser does not support HTML5 video.
           </video>
         ) : (
-          <Card className="aspect-video flex flex-col items-center justify-center text-center text-slate-500">
-            <Video size={30} className="mb-3 text-slate-400 dark:text-slate-500" />
+          <Card className="aspect-video flex flex-col items-center justify-center text-center text-slate-600 dark:text-slate-400">
+            <Video size={30} className="mb-3 text-slate-600 dark:text-slate-400" />
             <p className="mb-2 font-medium text-slate-600 dark:text-slate-300">{t('player.noVideo')}</p>
             <p className="max-w-xl text-sm">{lecture.transcript ?? ''}</p>
           </Card>
         )}
 
         <div className="flex flex-wrap items-center gap-3">
-          <label htmlFor="speed" className="text-sm text-slate-500">{t('player.speed')}</label>
+          <label htmlFor="speed" className="text-sm text-slate-600 dark:text-slate-400">{t('player.speed')}</label>
           <select
             id="speed"
             className="input w-24"
@@ -277,7 +315,7 @@ export default function CoursePlayer() {
             </button>
           )}
           {progress.data && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-600 dark:text-slate-400">
               {progress.data.completed
                 ? t('player.completed')
                 : t('player.resumeAt', { time: fmt(progress.data.watched_seconds) })}
@@ -296,9 +334,9 @@ export default function CoursePlayer() {
                     href={mediaUrl(url)}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-2 text-sm text-brand-600 hover:underline"
+                    className="flex items-center gap-2 text-sm text-brand-600 hover:underline dark:text-brand-300"
                   >
-                    <ResourceIcon url={url} className="h-4 w-4 shrink-0 text-slate-400" />
+                    <ResourceIcon url={url} className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-400" />
                     <span>{resourceLabel(url)}</span>
                   </a>
                 </li>
@@ -341,7 +379,7 @@ export default function CoursePlayer() {
                 <span className="flex-1">{n.content}</span>
                 <button
                   aria-label={t('player.deleteNote')}
-                  className="text-slate-400 transition hover:text-red-500"
+                  className="text-slate-600 dark:text-slate-400 transition hover:text-red-500"
                   onClick={() => deleteNote(n.id)}
                 >
                   <X className="h-4 w-4" />
@@ -349,7 +387,7 @@ export default function CoursePlayer() {
               </li>
             ))}
             {notes.data?.items.length === 0 && (
-              <li className="text-sm text-slate-400">{t('player.noNotes')}</li>
+              <li className="text-sm text-slate-600 dark:text-slate-400">{t('player.noNotes')}</li>
             )}
           </ul>
         </Card>
@@ -361,12 +399,12 @@ export default function CoursePlayer() {
             {bookmarks.data?.items.map((b) => (
               <li key={b.id} className="flex items-center gap-1 rounded-sm border border-slate-300/70 px-3 py-1 text-xs dark:border-white/15">
                 <button className="flex items-center gap-1 font-mono hover:underline" onClick={() => seekTo(b.timestamp_seconds)}>
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                  <Clock className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
                   {fmt(b.timestamp_seconds)}
                 </button>
                 <button
                   aria-label={t('player.removeBookmark')}
-                  className="text-slate-400 transition hover:text-red-500"
+                  className="text-slate-600 dark:text-slate-400 transition hover:text-red-500"
                   onClick={() => deleteBookmark(b.id)}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -374,7 +412,7 @@ export default function CoursePlayer() {
               </li>
             ))}
             {bookmarks.data?.items.length === 0 && (
-              <li className="text-sm text-slate-400">{t('player.noBookmarks')}</li>
+              <li className="text-sm text-slate-600 dark:text-slate-400">{t('player.noBookmarks')}</li>
             )}
           </ul>
         </Card>
@@ -389,7 +427,7 @@ export default function CoursePlayer() {
         </Card>
         {course.data?.modules.map((m) => (
           <Card key={m.id}>
-            <h3 className="mb-2 text-sm font-semibold text-slate-500">{m.title}</h3>
+            <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-400">{m.title}</h3>
             <ul className="space-y-1">
               {m.lectures.map((l) => (
                 <li key={l.id}>
@@ -399,7 +437,7 @@ export default function CoursePlayer() {
                     }`}
                     onClick={() => navigate(`/learn/${courseId}/${l.id}`)}
                   >
-                    <Video className="h-4 w-4 shrink-0 text-slate-400" />
+                    <Video className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-400" />
                     <span className="truncate">{l.title}</span>
                   </button>
                 </li>
@@ -411,9 +449,9 @@ export default function CoursePlayer() {
                   <Link
                     key={q.id}
                     to={`/quiz/${q.id}`}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-brand-600 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-brand-600 dark:text-brand-300 transition hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    <ClipboardCheck className="h-4 w-4 shrink-0 text-slate-400" />
+                    <ClipboardCheck className="h-4 w-4 shrink-0 text-slate-600 dark:text-slate-400" />
                     <span className="truncate">{q.title} ({q.question_count} Qs)</span>
                   </Link>
                 ))}
@@ -423,8 +461,8 @@ export default function CoursePlayer() {
         ))}
         <Card>
           <div className="eyebrow mb-1">{t('dashboard.progress')}</div>
-          <ProgressBar percent={courseProgress.data ?? 0} />
-          <p className="mt-1 text-xs text-slate-400">
+          <ProgressBar percent={courseProgress.data ?? 0} label={t('dashboard.progress')} />
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
             {t('dashboard.percentComplete', { value: Math.round(courseProgress.data ?? 0) })}
           </p>
         </Card>

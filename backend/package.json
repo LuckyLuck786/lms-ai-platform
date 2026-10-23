@@ -2,7 +2,7 @@
   "name": "@lms-ai/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Core LMS service \u2014 Express + TypeScript REST API with RBAC",
+  "description": "Core LMS service — Express + TypeScript REST API with RBAC",
   "type": "commonjs",
   "main": "dist/server.js",
   "scripts": {
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@google-cloud/storage": "^8.4.0",
+    "@google-cloud/video-transcoder": "^5.2.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^6.3.11",
     "cors": "^2.8.5",

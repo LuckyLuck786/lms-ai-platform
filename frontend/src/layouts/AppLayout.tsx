@@ -39,7 +39,7 @@ export default function AppLayout() {
             to="/"
             className="whitespace-nowrap font-display text-lg font-semibold text-slate-900 dark:text-white"
           >
-            Vertexon <span className="text-slate-500 dark:text-slate-400">LMS-AI</span>
+            Vertexon <span className="text-slate-600 dark:text-slate-400">LMS-AI</span>
           </Link>
           {/* Sits inline on wide screens and wraps onto its own row on narrow ones. */}
           <nav
@@ -82,12 +82,15 @@ export default function AppLayout() {
             {user && <NotificationBell />}
             {user ? (
               <>
-                <span className="hidden text-sm text-slate-600 sm:inline dark:text-slate-400">
+                <Link
+                  to="/account"
+                  className="hidden text-sm text-slate-600 hover:text-slate-900 hover:underline sm:inline dark:text-slate-400 dark:hover:text-white"
+                >
                   {user.full_name}
-                  <span className="ml-1 text-[11px] uppercase tracking-caps text-slate-400">
+                  <span className="ml-1 text-[11px] uppercase tracking-caps text-slate-600 dark:text-slate-400">
                     {user.role}
                   </span>
-                </span>
+                </Link>
                 <button type="button" onClick={logout} className="btn-secondary">
                   {t('auth.logout')}
                 </button>
@@ -101,11 +104,22 @@ export default function AppLayout() {
         </div>
       </header>
       <DemoBanner />
+      {user && user.email_verified === false && (
+        <div
+          role="status"
+          className="border-b border-gold-400/40 bg-paper-sunk px-4 py-2 text-center text-sm text-slate-800 dark:bg-ink-800 dark:text-slate-200"
+        >
+          {t('verify.banner', { email: user.email })}{' '}
+          <Link to="/account" className="font-medium text-brand-700 underline dark:text-brand-300">
+            {t('verify.bannerAction')}
+          </Link>
+        </div>
+      )}
       <main id="main-content" className="mx-auto max-w-6xl px-4 py-8">
         <Outlet />
       </main>
       <footer className="mt-12 border-t border-slate-300/70 py-6 dark:border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 text-xs text-slate-500 dark:text-slate-400">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 text-xs text-slate-600 dark:text-slate-400">
           <span>{t('app.footer')}</span>
           <nav aria-label={t('legal.title')} className="flex items-center gap-4">
             <Link to="/terms" className="link-quiet">{t('legal.terms')}</Link>

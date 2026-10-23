@@ -1,4 +1,4 @@
-import { Worker, Job } from 'bullmq';
+import { DelayedError, Worker, Job } from 'bullmq';
 import { query, queryOne } from '../db/pool';
 import { buildCertificatePdf } from '../utils/certificate';
 import { evaluateAllStreaks } from '../modules/gamification/gamification.service';
@@ -11,6 +11,7 @@ import {
 import { recomputeTopicMasterySafe } from '../utils/mastery';
 import { closeEmailTransport, sendEmail } from '../services/email';
 import { logger } from '../utils/logger';
+import { processLectureVideo, videoPipelineEnabled } from '../services/video';
 import { env } from '../config/env';
 import { decryptPii } from '../utils/pii';
 
@@ -142,6 +143,23 @@ export function startWorkers(): { close: () => Promise<void> } {
     { connection: queueConnection(), concurrency: 2 },
   );
 
+  // Adaptive streaming (PRD §9.4): each pass advances the Transcoder job one
+  // step; while it is still running the job delays itself 15 s and re-checks,
+  // instead of holding a worker slot for the whole transcode.
+  const videoWorker = new Worker(
+    'video',
+    async (job: Job<{ lectureId: string }>, token?: string) => {
+      if (!videoPipelineEnabled()) return { skipped: 'video pipeline not configured' };
+      const step = await processLectureVideo(job.data.lectureId);
+      if (step === 'pending') {
+        await job.moveToDelayed(Date.now() + 15_000, token);
+        throw new DelayedError();
+      }
+      return { lecture_id: job.data.lectureId };
+    },
+    { connection: queueConnection(), concurrency: 2 },
+  );
+
   for (const [name, w] of [
     ['certificates', certificateWorker],
     ['streaks', streakWorker],
@@ -150,6 +168,7 @@ export function startWorkers(): { close: () => Promise<void> } {
     ['transcription', transcriptionWorker],
     ['recommendations', recommendationWorker],
     ['ingestion', ingestionWorker],
+    ['video', videoWorker],
   ] as const) {
     w.on('failed', (job, err) => {
       logger.error('job_failed', { queue: name, jobId: job?.id, error: err.message });
@@ -157,7 +176,7 @@ export function startWorkers(): { close: () => Promise<void> } {
   }
 
   logger.info('workers_started', {
-    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription', 'recommendations', 'ingestion'],
+    queues: ['certificates', 'streaks', 'notifications', 'mastery', 'transcription', 'recommendations', 'ingestion', 'video'],
   });
 
   return {
@@ -170,6 +189,7 @@ export function startWorkers(): { close: () => Promise<void> } {
         transcriptionWorker.close(),
         recommendationWorker.close(),
         ingestionWorker.close(),
+        videoWorker.close(),
         closeEmailTransport(),
       ]);
     },

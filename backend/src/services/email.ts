@@ -20,6 +20,7 @@ export type EmailKind =
   | 'discussion'
   | 'badge'
   | 'grade'
+  | 'account'
   | 'generic';
 
 export interface EmailCta {
@@ -50,6 +51,7 @@ const ACCENTS: Record<EmailKind, string> = {
   discussion: '#7c3aed',
   badge: '#c2410c',
   grade: '#047857',
+  account: '#0f766e',
   generic: '#1e293b',
 };
 

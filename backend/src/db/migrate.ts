@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { pool } from './pool';
-import { emailHash, encryptPii, isEncrypted } from '../utils/pii';
+import { decryptPii, emailHash, encryptPii, isEncrypted } from '../utils/pii';
 
 /**
  * Minimal forward-only SQL migration runner.
@@ -30,7 +30,6 @@ async function migrate(): Promise<void> {
       if (applied.rowCount) continue;
 
       const sql = fs.readFileSync(path.join(dir, file), 'utf8');
-       
       console.log(`Applying migration ${file}...`);
       await client.query('BEGIN');
       try {
@@ -42,7 +41,6 @@ async function migrate(): Promise<void> {
         throw err;
       }
     }
-     
     console.log('Migrations up to date.');
 
     // Encrypt any email still stored in plaintext (migration 015). Done here,
@@ -61,8 +59,19 @@ async function migrate(): Promise<void> {
       ]);
     }
     if (pending.rowCount) {
-       
       console.log(`Encrypted ${pending.rowCount} plaintext email(s).`);
+    }
+
+    // Seeded demo accounts (@vertexon.demo) have no real inbox, so they can
+    // never click a verification link: mark them verified. Every other
+    // account verifies through the emailed link (migration 020).
+    const unverified = await client.query<{ id: string; email: string }>(
+      'SELECT id, email FROM users WHERE email_verified_at IS NULL',
+    );
+    for (const row of unverified.rows) {
+      if (decryptPii(row.email).endsWith('@vertexon.demo')) {
+        await client.query('UPDATE users SET email_verified_at = now() WHERE id = $1', [row.id]);
+      }
     }
   } finally {
     client.release();
@@ -71,7 +80,6 @@ async function migrate(): Promise<void> {
 }
 
 migrate().catch((err) => {
-   
   console.error('Migration failed:', err);
   process.exit(1);
 });

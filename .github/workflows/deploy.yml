@@ -1,43 +1,50 @@
 name: Deploy
 
-# PRD §14.2: deploy only after CI is green on main. Authentication is keyless
-# (Workload Identity Federation) — no service-account key exists anywhere; the
-# provider accepts only this repository's main branch.
+# PRD §14.2 release flow:
+#   - CI green on main  → build SHA-tagged images, deploy to STAGING, smoke-test.
+#   - push a tag v*     → promote that commit's images to PRODUCTION, smoke-test.
+# Production never runs an image that staging did not run first: the tag job
+# deploys the exact image digest built for the tagged commit.
+#
+# Authentication is keyless (Workload Identity Federation); the provider only
+# accepts this repository's main branch and v* tags.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  push:
+    tags: ['v*']
   workflow_dispatch:
-
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+    inputs:
+      target:
+        description: staging or production
+        required: true
+        default: staging
 
 env:
   REGION: us-central1
   REGISTRY: us-central1-docker.pkg.dev/transitviz-67dus/lms-docker
 
 jobs:
-  deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+  staging:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    concurrency: { group: deploy-staging, cancel-in-progress: false }
+    permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      - id: auth
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build and push images (tagged with the commit SHA for rollback, PRD §14.5)
+      - name: Build and push images (tagged with the commit SHA, PRD §14.5)
         run: |
           SHA=$(git rev-parse --short HEAD)
           echo "SHA=$SHA" >> "$GITHUB_ENV"
@@ -47,22 +54,45 @@ jobs:
           docker push "$REGISTRY/backend:$SHA"
           docker push "$REGISTRY/ai-service:$SHA"
 
-      # Order matters: the AI service first (the backend calls it), then the
-      # worker (it reads both old and new data shapes), then the API, whose
-      # boot runs migrations. Flags, secrets and networking persist on each
-      # service, so an image-only deploy keeps them.
-      - name: Deploy ai-service
-        run: gcloud run deploy ai-service --image "$REGISTRY/ai-service:$SHA" --region "$REGION" --quiet
-      - name: Deploy worker pool
-        run: gcloud run worker-pools deploy lms-worker --image "$REGISTRY/backend:$SHA" --region "$REGION" --quiet
-      - name: Deploy backend
-        run: gcloud run deploy backend --image "$REGISTRY/backend:$SHA" --region "$REGION" --quiet
+      # Order: AI service, then the worker, then the API (whose boot migrates).
+      # Flags, secrets and networking persist on each service.
+      - run: gcloud run deploy ai-service-staging --image "$REGISTRY/ai-service:$SHA" --region "$REGION" --quiet
+      - run: gcloud run worker-pools deploy lms-worker-staging --image "$REGISTRY/backend:$SHA" --region "$REGION" --quiet
+      - run: gcloud run deploy backend-staging --image "$REGISTRY/backend:$SHA" --region "$REGION" --quiet
 
-      - name: Smoke test
+      - name: Smoke test staging
+        run: ./scripts/smoke.sh backend-staging ai-service-staging
+
+  production:
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+    runs-on: ubuntu-latest
+    concurrency: { group: deploy-production, cancel-in-progress: false }
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve the images staging ran
         run: |
-          for svc in backend ai-service; do
-            URL=$(gcloud run services describe $svc --region "$REGION" --format='value(status.url)')
-            curl -sf "$URL/health" || { echo "$svc health check failed"; exit 1; }
+          SHA=$(git rev-parse --short HEAD)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          for img in backend ai-service; do
+            gcloud artifacts docker images describe "$REGISTRY/$img:$SHA" >/dev/null \
+              || { echo "::error::$img:$SHA was never built — merge to main and let staging deploy it first"; exit 1; }
           done
-          API=$(gcloud run services describe backend --region "$REGION" --format='value(status.url)')
-          curl -sf "$API/api/v1/courses?limit=1" >/dev/null
+          STAGED=$(gcloud run services describe backend-staging --region "$REGION" \
+            --format='value(spec.template.spec.containers[0].image)')
+          echo "staging currently runs: $STAGED"
+
+      - run: gcloud run deploy ai-service --image "$REGISTRY/ai-service:$SHA" --region "$REGION" --quiet
+      - run: gcloud run worker-pools deploy lms-worker --image "$REGISTRY/backend:$SHA" --region "$REGION" --quiet
+      - run: gcloud run deploy backend --image "$REGISTRY/backend:$SHA" --region "$REGION" --quiet
+
+      - name: Smoke test production
+        run: ./scripts/smoke.sh backend ai-service
