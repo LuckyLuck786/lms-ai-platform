@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from ..core.config import get_settings
 from ..core.llm import LLMError, complete
 from ..rag.prompt import build_context_blocks
-from ..rag.retriever import retrieve
+from ..rag.retriever import relevant, retrieve
 
 router = APIRouter()
 
@@ -41,6 +41,8 @@ SYSTEM = (
     "1. why their answer is wrong — address the specific misconception it suggests;\n"
     "2. the correct answer and the reasoning that leads to it.\n"
     "Ground the explanation ONLY in the CONTEXT excerpts and name the lecture you rely on. "
+    "If the CONTEXT is empty or does not cover the question, say the course material does not "
+    "cover it, explain from the question itself, and do not name any lecture. "
     "Be encouraging and direct; do not repeat the question back.\n\nCONTEXT:\n{context}"
 )
 
@@ -72,7 +74,7 @@ def _fallback(req: ExplainRequest, chunks: list[dict]) -> str:
 @router.post("/explain")
 def explain(req: ExplainRequest) -> dict:
     """POST /api/v1/ai/internal/explain — called by the backend only."""
-    chunks = retrieve(req.course_id, req.question_text)
+    chunks = relevant(retrieve(req.course_id, req.question_text))
     demo_mode = False
     if get_settings().llm_available:
         try:

@@ -4,9 +4,27 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ..core.config import get_settings
-from .embeddings import embed
+from .embeddings import embed, embedding_provider
 
 TOP_K = 6
+
+# Cosine similarity below which a chunk is not about the question. Measured on
+# gemini-embedding-001 over a real course: on-topic questions score 0.66-0.72
+# on the right lecture, while unrelated lectures and off-topic questions stay
+# at or below ~0.51. Without the cut the tutor was handed the "closest"
+# irrelevant chunks and cited lectures that never covered the topic.
+MIN_SIMILARITY = 0.55
+
+
+def relevant(chunks: list[dict]) -> list[dict]:
+    """Keep only chunks that are actually about the question.
+
+    Applied only with real embeddings: the offline hash fallback has no
+    meaningful similarity scale, so there every chunk is kept.
+    """
+    if embedding_provider() != "gemini":
+        return chunks
+    return [c for c in chunks if (c.get("similarity") or 0) >= MIN_SIMILARITY]
 
 
 def retrieve(course_id: str, question: str, top_k: int = TOP_K) -> list[dict]:

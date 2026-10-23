@@ -7,7 +7,7 @@ import { revokeAllRefreshTokens } from '../../utils/jwt';
 import { listPendingCourses } from '../courses/courses.service';
 import { pageEnvelope, parsePage } from '../../utils/pagination';
 import { lecturesNeedingVideo, videoPipelineEnabled } from '../../services/video';
-import { queueVideo } from '../../jobs/queues';
+import { queueIngestion, queueVideo } from '../../jobs/queues';
 import { logger } from '../../utils/logger';
 import { env } from '../../config/env';
 import { sendEmail, smtpConfigured, verifySmtp } from '../../services/email';
@@ -263,6 +263,23 @@ adminRouter.post(
     for (const lectureId of ids) await queueVideo({ lectureId });
     await audit(req.user!.id, 'video_backfill', 'lecture', null, { queued: ids.length });
     res.json({ queued: ids.length });
+  }),
+);
+
+// POST /admin/rag/backfill — queue RAG ingestion for every lecture that has a
+// transcript but no embedded chunks (e.g. lectures inserted by a seed script,
+// which bypasses the API's ingestion hook). Idempotent.
+adminRouter.post(
+  '/admin/rag/backfill',
+  wrap(async (req, res) => {
+    const rows = await query<{ id: string }>(
+      `SELECT l.id FROM lectures l
+       WHERE l.transcript IS NOT NULL AND btrim(l.transcript) <> ''
+         AND NOT EXISTS (SELECT 1 FROM document_chunks dc WHERE dc.lecture_id = l.id)`,
+    );
+    for (const { id } of rows) await queueIngestion({ lectureId: id });
+    await audit(req.user!.id, 'rag_backfill', 'lecture', null, { queued: rows.length });
+    res.json({ queued: rows.length });
   }),
 );
 

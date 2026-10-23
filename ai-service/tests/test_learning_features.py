@@ -44,7 +44,9 @@ def test_explain_without_llm_names_the_correct_answer_and_cites_a_lecture(monkey
     monkeypatch.setattr(
         explain_router,
         "retrieve",
-        lambda *_a, **_k: [{"lecture_id": "l1", "lecture_title": "Quicksort", "chunk_text": "Pivot choice matters."}],
+        lambda *_a, **_k: [
+            {"lecture_id": "l1", "lecture_title": "Quicksort", "chunk_text": "Pivot choice matters.", "similarity": 0.8}
+        ],
     )
     res = TestClient(app).post("/api/v1/ai/internal/explain", json=_explain_body())
     assert res.status_code == 200
@@ -85,3 +87,22 @@ def test_flashcards_are_reused_so_review_history_survives(monkeypatch):
     assert res.status_code == 200
     assert res.json()["reused"] is True
     assert res.json()["cards"][0]["question"] == "Q?"
+
+
+def test_unrelated_material_is_never_cited(monkeypatch):
+    """Below the similarity cut-off a chunk is not about the question, so it
+    must not be used or named — this is what stopped the tutor citing an
+    unrelated lecture on staging."""
+    from app.rag import retriever
+
+    monkeypatch.setattr(retriever, "embedding_provider", lambda: "gemini")
+    chunks = [
+        {"lecture_id": "a", "similarity": 0.70},
+        {"lecture_id": "b", "similarity": 0.51},
+        {"lecture_id": "c", "similarity": None},
+    ]
+    assert [c["lecture_id"] for c in retriever.relevant(chunks)] == ["a"]
+
+    # The offline hash embeddings have no meaningful scale: keep everything.
+    monkeypatch.setattr(retriever, "embedding_provider", lambda: "local-fallback")
+    assert len(retriever.relevant(chunks)) == 3

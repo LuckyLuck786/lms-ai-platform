@@ -8,7 +8,7 @@ from ..core.db import execute, query_all, query_one
 from ..core.llm import LLMError, complete
 from ..core.mastery import average_mastery, fetch_course_mastery, mastery_guidance, resolve_depth
 from ..rag.prompt import build_context_blocks, build_system_prompt, fallback_reply
-from ..rag.retriever import retrieve
+from ..rag.retriever import relevant, retrieve
 
 router = APIRouter()
 
@@ -174,7 +174,7 @@ def send_message(
     ]
 
     # Step 2: similarity search scoped to this course (PRD §9.2)
-    chunks = retrieve(session["course_id"], req.message)
+    chunks = relevant(retrieve(session["course_id"], req.message))
 
     # Steps 3-4: assemble prompt, call the LLM, store messages.
     # Any provider failure degrades to the extractive offline answer so the
