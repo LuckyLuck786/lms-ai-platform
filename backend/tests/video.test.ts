@@ -87,9 +87,13 @@ describe('video pipeline', () => {
     queryOneMock.mockResolvedValue({ video_url: '/uploads/x.mp4', hls_status: 'processing', hls_job: 'jobs/1' });
     getJob.mockResolvedValue([
       {
+        // Shape the API really returns for a preset job: no templateId, no
+        // top-level inputUri — both live in the expanded config.
         state: 'FAILED',
-        templateId: 'preset/web-hd',
-        inputUri: 'gs://media-bucket/x.mp4',
+        config: {
+          inputs: [{ key: 'input0', uri: 'gs://media-bucket/x.mp4' }],
+          elementaryStreams: [{ key: 'v', videoStream: {} }, { key: 'a', audioStream: {} }],
+        },
         error: { message: 'atom atom0 does not have any inputs ([input0]) with an audio track' },
       },
     ]);
@@ -100,6 +104,19 @@ describe('video pipeline', () => {
     expect(job.templateId).toBeUndefined();
     expect(job.config.manifests[0].fileName).toBe('manifest.m3u8');
     expect(queryMock.mock.calls[0][1]).toEqual([LECTURE, 'jobs/2']);
+  });
+
+  it('does not retry the video-only job itself', async () => {
+    queryOneMock.mockResolvedValue({ video_url: '/uploads/x.mp4', hls_status: 'processing', hls_job: 'jobs/2' });
+    getJob.mockResolvedValue([
+      {
+        state: 'FAILED',
+        config: { inputs: [{ uri: 'gs://media-bucket/x.mp4' }], elementaryStreams: [{ key: 'v', videoStream: {} }] },
+        error: { message: 'something about audio' },
+      },
+    ]);
+    await expect(processLectureVideo(LECTURE)).resolves.toBe('done');
+    expect(createJob).not.toHaveBeenCalled();
   });
 
   it('does nothing for a lecture without video or one already streaming', async () => {

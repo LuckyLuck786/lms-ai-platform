@@ -130,11 +130,16 @@ export async function processLectureVideo(lectureId: string): Promise<VideoStep>
   }
   if (state === 'FAILED') {
     // A silent source fails the audio+video preset; retry once video-only.
-    if (job.templateId === 'preset/web-hd' && /audio/i.test(job.error?.message ?? '')) {
+    // The API does not echo templateId for preset jobs, so "the failed job
+    // asked for audio" is read from its expanded config instead — which also
+    // stops the video-only retry from ever retrying itself.
+    const wantedAudio = (job.config?.elementaryStreams ?? []).some((e) => !!e.audioStream);
+    const inputUri = job.inputUri || job.config?.inputs?.[0]?.uri;
+    if (wantedAudio && inputUri && /audio/i.test(job.error?.message ?? '')) {
       const [retry] = await client.createJob({
         parent: client.locationPath(env.video.project, env.video.location),
         job: {
-          inputUri: job.inputUri,
+          inputUri,
           outputUri: `gs://${env.video.bucket}/hls/${lectureId}/`,
           config: VIDEO_ONLY_CONFIG,
         },
