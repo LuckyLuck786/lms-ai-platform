@@ -18,7 +18,7 @@ This is the stack production runs:
 
 ---
 
-## 0. Current production topology (as deployed, 23 October 2026)
+## 0. Current topology (as deployed, 24 October 2026)
 
 The generic steps below use placeholders. This is what is actually running in
 project `transitviz-67dus`, region `us-central1`:
@@ -36,6 +36,9 @@ project `transitviz-67dus`, region `us-central1`:
 | Email | Gmail SMTP (`smtp.gmail.com:465`, app password) | Google Cloud has no email-sending product; ports 465/587 are open from Cloud Run |
 | Monitoring | Uptime checks `lms-backend-health`, `lms-ai-service-health` (5 min) + alert policy "LMS-AI service down" | Emails the owner |
 | Budget | "LMS-AI monthly", ₹6,000, alerts at 50/90/100 % | Measured before credits |
+| Video CDN | Global HTTPS load balancer `lms-cdn-https` → backend bucket `lms-video-backend` (Cloud CDN) → bucket `lms-video-transitviz` | Host `cdn-34-49-229-91.sslip.io`, Google-managed certificate `lms-cdn-cert`. Bucket is public-read and holds only transcoded lecture video |
+| Transcoding | Transcoder API, `preset/web-hd`; video-only ladder for silent sources | Worker queue `video`; `POST /admin/videos/backfill` re-queues lectures that were never processed |
+| Staging | `backend-staging`, `ai-service-staging`, worker pool `lms-worker-staging`, database `lms_staging` (same instance), Redis DB 1, Vercel project `lms-ai-staging` | Secrets suffixed `-staging`; SMTP and LLM keys shared |
 | Backups | Daily automated (20:30 UTC), 7 retained, point-in-time recovery | Cloud SQL |
 | CI/CD | `.github/workflows/deploy.yml` after green CI on `main` | Service account `github-deployer` via Workload Identity pool `github` — no keys; accepts only `LuckyLuck786/lms-ai-platform` on `refs/heads/main` |
 
@@ -59,7 +62,23 @@ compared in constant time. An unauthenticated call returns 401.
 `pii-hash-key` finds users by email. Destroying or rotating either without a
 re-encryption pass locks every user out. Never delete them.
 
-**Redeploying.** Pushing to `main` deploys automatically once CI passes. By hand:
+**Release flow.** Pushing to `main` deploys to **staging** once CI passes.
+Tagging a release promotes the same images to **production**:
+
+```bash
+git tag -a v1.0.1 -m "..." && git push origin v1.0.1
+```
+
+The frontend is deployed with the Vercel CLI, because the Vercel projects
+are not linked to Git:
+
+```bash
+cd frontend && vercel --prod                     # production (lms-ai-frontend)
+# staging: a copy of frontend/ linked to the lms-ai-staging project
+vercel link --project lms-ai-staging && vercel --prod
+```
+
+Images can also be built and deployed by hand:
 
 ```bash
 SHA=$(git rev-parse --short HEAD)

@@ -34,7 +34,8 @@ Deployment detail (resource names, secrets, redeploy commands) lives in
             └──────── lms-worker (Cloud Run worker pool, always on) ──┘
                       same backend image, BullMQ consumers
 
-  Cloud Storage: uploaded lecture material and assignment files
+  Cloud Storage: uploaded lecture material and assignment files (private)
+  Video: Transcoder API → video bucket → Cloud CDN (HTTPS LB) → hls.js player
   Secret Manager: every credential · Cloud Monitoring: uptime checks + alert
 ```
 
@@ -65,6 +66,7 @@ All run on `lms-worker` through BullMQ. The API runs with
 | `mastery` | quiz submit, lecture completion, AI chat | recompute per-topic mastery |
 | `streaks` | cron 03:00 UTC | reset broken streaks |
 | `recommendations` | cron 02:00 UTC | recompute every learner's suggestions |
+| `video` | lecture created with a video, or admin backfill | Transcoder job → HLS in the video bucket; polls by delaying itself |
 
 ## Caching (PRD §9.4)
 
@@ -83,7 +85,11 @@ unreviewed AI quiz drafts.
   logout and on role change. Passwords hashed with bcrypt.
 - Role checks in `requireRole()` middleware; ownership checks (instructor owns
   the course) in the service layer, per PRD §11.
-- Emails stored as AES-256-GCM ciphertext with an HMAC blind index for lookup.
+- Emails and phone numbers stored as AES-256-GCM ciphertext; emails also carry an
+  HMAC blind index for lookup.
+- Email verification and email change use single-use 24-hour links; only the
+  token's SHA-256 is stored, and a change takes effect only when the new
+  address confirms.
 - `ai-service` rejects any `/api/v1/ai` call without the 64-character internal
   token.
 - Cloud SQL reachable only through the Cloud SQL connector (plus the owner's IP
@@ -96,7 +102,6 @@ unreviewed AI quiz drafts.
 | NGINX API gateway | Google Front End (Cloud Run) + in-app rate limiting | Managed TLS and load balancing; no extra hop to run |
 | Anthropic API | Groq + Gemini, Anthropic optional | Owner's choice: free tiers |
 | AWS S3 / MinIO | Google Cloud Storage | Deployed on GCP |
-| HLS through a CDN | Progressive MP4 from the source URL | No video is hosted on the platform yet; see the compliance report |
 | Prometheus + Grafana | Cloud Monitoring uptime checks, Cloud Logging | Hosted option the PRD allows |
 | Winston / structlog | Structured JSON loggers (backend, ai-service) | Same output, no dependency |
 | Jest | Vitest | Same API, native TypeScript |
