@@ -46,6 +46,14 @@ export function userOrIpKey(req: Request): string {
 }
 
 /**
+ * `GET /auth/me` only reads the signed-in profile (the SPA calls it on every
+ * load). It is not a credential endpoint, so it is limited per user like any
+ * other authenticated read rather than sharing the strict per-IP /auth budget
+ * — which a classroom behind one NAT would otherwise exhaust in seconds.
+ */
+const isProfileRead = (req: Request) => req.method === 'GET' && /\/auth\/me\/?$/.test(req.originalUrl.split('?')[0]);
+
+/**
  * PRD §8.9:
  *  - /auth/*        10 req/min/IP
  *  - /ai/chat/*     20 req/min/user
@@ -61,6 +69,7 @@ export const authRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.ip ?? 'unknown',
   handler: sendLimited,
+  skip: isProfileRead,
   store: store('auth'),
   passOnStoreError: true,
 });
@@ -83,7 +92,7 @@ export const generalRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
   handler: sendLimited,
-  skip: (req) => req.path.startsWith('/auth') || req.path.startsWith('/ai/chat'),
+  skip: (req) => (req.path.startsWith('/auth') && !isProfileRead(req)) || req.path.startsWith('/ai/chat'),
   store: store('general'),
   passOnStoreError: true,
 });

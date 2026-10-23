@@ -310,4 +310,20 @@ describe('Redis-backed rate limiting (PRD §8.9)', () => {
     expect(statuses[10]).toBe(429);
     expect((await redis.keys('rl:auth:*')).length).toBeGreaterThan(0);
   });
+
+  it('does not spend the /auth budget on profile reads', async () => {
+    const token = await login('student@vertexon.demo');
+    for (let i = 0; i < 12; i++) {
+      const res = await request(app)
+        .get('/api/v1/auth/me')
+        .set('x-forwarded-for', '203.0.113.42')
+        .set('authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+    }
+    const res = await request(app)
+      .get('/api/v1/auth/me')
+      .set('x-forwarded-for', '203.0.113.42')
+      .set('authorization', `Bearer ${token}`);
+    expect(res.headers['ratelimit-limit']).toBe('100');
+  });
 });
