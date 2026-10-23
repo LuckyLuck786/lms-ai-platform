@@ -175,9 +175,24 @@ function getTransporter(): Transporter {
   return cached;
 }
 
+/**
+ * Addresses that can never receive mail: RFC 2606 / RFC 6761 reserved names
+ * (example.com, *.test, *.invalid, *.localhost …) and the seeded demo
+ * domain. Sending to them only produces bounce messages in the sender's
+ * inbox, so they are dropped before the SMTP call.
+ */
+const UNDELIVERABLE = /@(?:[^@]+\.)?(?:example\.(?:com|net|org)|vertexon\.demo)$|\.(?:test|example|invalid|localhost)$/i;
+
+export function isDeliverable(address: string): boolean {
+  return !UNDELIVERABLE.test(address.trim());
+}
+
+/** Recipients per message; each sees only their own address (Bcc). */
+const BATCH = 50;
+
 /** Send (or dry-run log) one message. Never throws on a dry-run. */
 export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
-  const recipients = msg.recipients.map((r) => r.trim()).filter(Boolean);
+  const recipients = msg.recipients.map((r) => r.trim()).filter(Boolean).filter(isDeliverable);
   if (!recipients.length) return { sent: 0 };
 
   const rendered = renderEmail(msg);
@@ -191,19 +206,25 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
     return { sent: 0, dryRun: true };
   }
 
-  const info = await getTransporter().sendMail({
-    from: `"${env.smtp.fromName}" <${env.smtp.from}>`,
-    to: recipients.join(','),
-    subject: rendered.subject,
-    text: rendered.text,
-    html: rendered.html,
-  });
-  logger.info('email_sent', {
-    kind: msg.kind,
-    subject: rendered.subject,
-    recipients: recipients.length,
-    messageId: info.messageId,
-  });
+  // One recipient: address them directly. Several (announcements): Bcc, so
+  // no learner sees another learner's email address.
+  const from = `"${env.smtp.fromName}" <${env.smtp.from}>`;
+  for (let i = 0; i < recipients.length; i += BATCH) {
+    const batch = recipients.slice(i, i + BATCH);
+    const info = await getTransporter().sendMail({
+      from,
+      ...(recipients.length === 1 ? { to: batch[0] } : { to: from, bcc: batch }),
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+    });
+    logger.info('email_sent', {
+      kind: msg.kind,
+      subject: rendered.subject,
+      recipients: batch.length,
+      messageId: info.messageId,
+    });
+  }
   return { sent: recipients.length };
 }
 

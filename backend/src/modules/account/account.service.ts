@@ -6,7 +6,7 @@ import { revokeAllRefreshTokens } from '../../utils/jwt';
 import { badRequest, conflict, notFound, unauthorized } from '../../utils/errors';
 import { decryptPii, emailHash, encryptPii, normaliseEmail } from '../../utils/pii';
 import { logger } from '../../utils/logger';
-import { PublicUser, toPublicUser, UserRow } from '../auth/auth.service';
+import { AuthResponse, issueTokens, PublicUser, toPublicUser, UserRow } from '../auth/auth.service';
 
 /**
  * Self-service account management: profile, password, email address and
@@ -149,7 +149,7 @@ export async function changePassword(
   userId: string,
   currentPassword: string,
   newPassword: string,
-): Promise<{ ok: true }> {
+): Promise<AuthResponse> {
   const user = await queryOne<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [
     userId,
   ]);
@@ -161,10 +161,12 @@ export async function changePassword(
     userId,
     await hashPassword(newPassword),
   ]);
-  // Every other session signs in again with the new password.
+  // Every session is revoked, then this one gets fresh tokens: other devices
+  // must sign in with the new password, the device that changed it stays in.
   await revokeAllRefreshTokens(userId);
   logger.info('password_changed', { user_id: userId });
-  return { ok: true };
+  const fresh = await queryOne<UserRow>('SELECT * FROM users WHERE id = $1', [userId]);
+  return issueTokens(fresh!);
 }
 
 export async function requestEmailChange(

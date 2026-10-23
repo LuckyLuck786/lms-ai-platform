@@ -1,5 +1,9 @@
+import { useEffect } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { clearAuth } from '../store/authSlice';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../services/api';
+import { User } from '../utils/types';
+import { clearAuth, setUser } from '../store/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import ThemeToggle from '../components/common/ThemeToggle';
 import NotificationBell from '../components/common/NotificationBell';
@@ -19,6 +23,18 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const user = useAppSelector((s) => s.auth.user);
   const { t, locale, setLocale } = useI18n();
+
+  // The stored user is a snapshot from sign-in. Refresh it from the server so
+  // a verification, rename or role change made elsewhere shows up here.
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get<User>('/auth/me')).data,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    if (me.data) dispatch(setUser(me.data));
+  }, [me.data, dispatch]);
 
   const logout = () => {
     dispatch(clearAuth());

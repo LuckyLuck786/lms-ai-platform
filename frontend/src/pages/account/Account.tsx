@@ -1,9 +1,9 @@
 import { FormEvent, ReactNode, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../services/api';
-import { setUser } from '../../store/authSlice';
+import { setAuth, setUser } from '../../store/authSlice';
 import { useAppDispatch } from '../../store/hooks';
-import { User } from '../../utils/types';
+import { AuthResponse, User } from '../../utils/types';
 import { Alert, Card, Spinner } from '../../components/common/ui';
 import { useI18n } from '../../utils/i18n';
 
@@ -206,6 +206,7 @@ function EmailSection({ user }: { user: User }) {
 
 function PasswordForm() {
   const { t } = useI18n();
+  const dispatch = useAppDispatch();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -213,8 +214,10 @@ function PasswordForm() {
 
   const change = useMutation({
     mutationFn: async () =>
-      (await api.put('/users/me/password', { current_password: current, new_password: next })).data,
-    onSuccess: () => {
+      (await api.put<AuthResponse>('/users/me/password', { current_password: current, new_password: next })).data,
+    onSuccess: (session) => {
+      // Every old session was revoked; keep this one on the fresh tokens.
+      dispatch(setAuth(session));
       setStatus({ kind: 'success', text: t('account.passwordChanged') });
       setCurrent('');
       setNext('');

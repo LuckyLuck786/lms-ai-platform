@@ -4,7 +4,7 @@
     python3 scripts/verify_prd.py http://localhost:4000/api/v1
 
 It creates a course, users, submissions and quiz attempts, so point it at a
-local or CI stack seeded with `npm run seed` — never production. Exits non-zero
+local, CI or staging stack seeded with `npm run seed` — never production. Exits non-zero
 if any requirement fails. Standard library only.
 """
 
@@ -47,14 +47,20 @@ def call(method, path, token=None, body=None, files=None, raw=False):
     elif body is not None:
         data = json.dumps(body).encode()
         headers["content-type"] = "application/json"
-    req = urllib.request.Request(API + path, data=data, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            payload = r.read()
-            return r.status, (payload if raw else _json(payload)), dict(r.headers)
-    except urllib.error.HTTPError as e:
-        payload = e.read()
-        return e.code, (payload if raw else _json(payload)), dict(e.headers)
+    for attempt in range(3):
+        req = urllib.request.Request(API + path, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                payload = r.read()
+                return r.status, (payload if raw else _json(payload)), dict(r.headers)
+        except urllib.error.HTTPError as e:
+            payload = e.read()
+            # Behind a real proxy X-Forwarded-For cannot be spoofed, so a hosted
+            # stack rate-limits this script like any client: wait out the window.
+            if e.code == 429 and attempt < 2:
+                time.sleep(int(e.headers.get("retry-after") or 61))
+                continue
+            return e.code, (payload if raw else _json(payload)), dict(e.headers)
 
 
 def _json(b):

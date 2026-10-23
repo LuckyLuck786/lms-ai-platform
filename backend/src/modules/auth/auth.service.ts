@@ -63,7 +63,7 @@ export async function toPublicUser(user: UserRow): Promise<PublicUser> {
   };
 }
 
-async function issueTokens(user: UserRow): Promise<AuthResponse> {
+export async function issueTokens(user: UserRow): Promise<AuthResponse> {
   const publicUser = await toPublicUser(user);
   const access_token = signAccessToken({
     sub: user.id,
