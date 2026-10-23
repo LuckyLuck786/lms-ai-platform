@@ -134,7 +134,11 @@ export async function purchaseCourse(courseId: string): Promise<void> {
       modal: { ondismiss: () => reject(new CheckoutCancelled()) },
       theme: { color: '#1e3a5f' },
     });
-    checkout.on('payment.failed', () => reject(new Error('The payment was declined.')));
+    checkout.on('payment.failed', (payload) => {
+      // Razorpay says why ("Your payment was declined by the bank", …).
+      const reason = (payload as { error?: { description?: string } })?.error?.description;
+      reject(new Error(reason ? `Payment failed: ${reason}` : 'The payment was declined.'));
+    });
     checkout.open();
   });
 

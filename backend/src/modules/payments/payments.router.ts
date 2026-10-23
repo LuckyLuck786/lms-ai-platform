@@ -4,7 +4,7 @@ import Razorpay from 'razorpay';
 import { z } from 'zod';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { query, queryOne } from '../../db/pool';
-import { badRequest, notFound, conflict, forbidden, serviceUnavailable } from '../../utils/errors';
+import { AppError, badRequest, notFound, conflict, forbidden, serviceUnavailable } from '../../utils/errors';
 import { env } from '../../config/env';
 import { queueEmail } from '../../jobs/queues';
 import { logger } from '../../utils/logger';
@@ -82,6 +82,23 @@ function verifyWebhookSignature(rawBody: string, signature: string | undefined):
     .update(rawBody)
     .digest('hex');
   return signaturesMatch(expected, signature);
+}
+
+/**
+ * Map a Razorpay SDK failure to an API error.
+ *
+ * A 401 from Razorpay means *our* keys are wrong — a server configuration
+ * problem, so it is reported as 503 rather than passed through: a 401 to the
+ * browser would read as "your session expired" and sign the learner out.
+ * Anything else from the gateway is a 502 (upstream failure).
+ */
+function gatewayError(err: unknown, op: string): AppError {
+  const e = err as { statusCode?: number; error?: { description?: string; code?: string } };
+  logger.error('razorpay_error', { op, status: e.statusCode, code: e.error?.code, description: e.error?.description });
+  if (e.statusCode === 401) {
+    return serviceUnavailable('The payment gateway rejected this server\'s API keys — payments are misconfigured');
+  }
+  return new AppError(502, 'PAYMENT_GATEWAY_ERROR', e.error?.description ?? 'The payment gateway could not create the order');
 }
 
 // --- Shared confirmation path --------------------------------------------
@@ -221,12 +238,21 @@ paymentsRouter.post(
     }
 
     const amountPaise = Math.round(price * 100);
-    const order = await razorpayClient().orders.create({
-      amount: amountPaise,
-      currency: 'INR',
-      receipt: `lms-${course.id}-${req.user!.id}-${Date.now()}`,
-      notes: { user_id: req.user!.id, course_id: course.id },
-    });
+    // Razorpay rejects orders below ₹1 (100 paise).
+    if (amountPaise < 100) throw badRequest('Course price must be at least ₹1 to be paid online', 'price');
+
+    let order: { id: string };
+    try {
+      order = await razorpayClient().orders.create({
+        amount: amountPaise,
+        currency: 'INR',
+        // Razorpay caps receipts at 40 characters.
+        receipt: `lms-${crypto.randomUUID().slice(0, 30)}`,
+        notes: { user_id: req.user!.id, course_id: course.id },
+      });
+    } catch (err) {
+      throw gatewayError(err, 'order_create');
+    }
 
     await query(
       `INSERT INTO payments (user_id, course_id, amount, currency, status, razorpay_order_id)
@@ -298,81 +324,94 @@ paymentsRouter.post(
   }),
 );
 
-// --- POST /courses/:id/payment/webhook -----------------------------------
+// --- Webhooks -------------------------------------------------------------
+//
+// Razorpay posts *events*: { entity: "event", event: "payment.captured",
+// payload: { payment: { entity: {...} } } }. Configure one URL in the
+// dashboard — POST /api/v1/payments/webhook — with events payment.captured
+// and order.paid. The course comes from the order notes we set at creation,
+// never from anything the caller chooses. The older per-course URL is kept.
+
+const ACTIONABLE_EVENTS = new Set(['payment.captured', 'payment.authorized', 'order.paid']);
 
 const webhookBodySchema = z.object({
-  entity: z.literal('payment'),
+  entity: z.literal('event'),
+  event: z.string(),
   payload: z.object({
-    payment: z.object({
-      entity: z.object({
-        id: z.string(),
-        order_id: z.string(),
-        status: z.string(),
-        amount: z.number(),
-        notes: z.record(z.string()).optional(),
-      }),
-    }),
+    payment: z
+      .object({
+        entity: z.object({
+          id: z.string(),
+          order_id: z.string(),
+          status: z.string(),
+          amount: z.number(),
+          notes: z.union([z.record(z.string()), z.array(z.unknown())]).optional(),
+        }),
+      })
+      .optional(),
   }),
 });
 
-paymentsRouter.post(
-  '/courses/:id/payment/webhook',
-  wrap(async (req, res) => {
-    // Signature is computed over the exact bytes Razorpay sent, captured by
-    // the express.json `verify` hook in app.ts.
-    const raw = (req as Request & { rawBody?: Buffer }).rawBody?.toString('utf8') ?? '';
-    const signature = req.headers['x-razorpay-signature'] as string | undefined;
+async function handleWebhook(req: Request, res: Response, courseIdFromPath?: string): Promise<void> {
+  // Signature is computed over the exact bytes Razorpay sent, captured by
+  // the express.json `verify` hook in app.ts.
+  const raw = (req as Request & { rawBody?: Buffer }).rawBody?.toString('utf8') ?? '';
+  const signature = req.headers['x-razorpay-signature'] as string | undefined;
 
-    if (!raw) {
-      throw badRequest('Empty webhook body');
-    }
-    if (!verifyWebhookSignature(raw, signature)) {
-      logger.warn('payment_webhook_bad_signature', { course_id: req.params.id });
-      throw badRequest('Invalid webhook signature');
-    }
+  if (!raw) throw badRequest('Empty webhook body');
+  if (!verifyWebhookSignature(raw, signature)) {
+    logger.warn('payment_webhook_bad_signature', { course_id: courseIdFromPath });
+    throw badRequest('Invalid webhook signature');
+  }
 
-    let parsedJson: unknown;
-    try {
-      parsedJson = JSON.parse(raw);
-    } catch {
-      throw badRequest('Webhook body is not valid JSON');
-    }
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(raw);
+  } catch {
+    throw badRequest('Webhook body is not valid JSON');
+  }
 
-    const parsed = webhookBodySchema.safeParse(parsedJson);
-    if (!parsed.success) {
-      throw badRequest('Webhook payload did not match the expected Razorpay shape');
-    }
+  const parsed = webhookBodySchema.safeParse(parsedJson);
+  if (!parsed.success) throw badRequest('Webhook payload did not match the expected Razorpay shape');
 
-    const payment = parsed.data.payload.payment.entity;
-    if (payment.status !== 'captured' && payment.status !== 'authorized') {
-      // Nothing to act on yet; acknowledge so Razorpay stops retrying.
-      return res.json({ received: true, status: payment.status, acted: false });
-    }
+  const { event } = parsed.data;
+  const payment = parsed.data.payload.payment?.entity;
+  // Acknowledge anything we do not act on, so Razorpay stops retrying it.
+  if (!payment || !ACTIONABLE_EVENTS.has(event)) {
+    res.json({ received: true, event, acted: false });
+    return;
+  }
 
-    const course = await queryOne<CourseRow>(
-      'SELECT id, price, status, title FROM courses WHERE id = $1',
-      [req.params.id],
-    );
-    if (!course) throw notFound('Course not found');
+  // Razorpay sends empty notes as [] rather than {}.
+  const notes = Array.isArray(payment.notes) ? {} : (payment.notes ?? {});
+  const courseId = courseIdFromPath ?? notes.course_id;
+  const userId = notes.user_id;
+  if (!userId || !courseId || notes.course_id !== courseId) {
+    logger.warn('payment_webhook_unmatched', { order_id: payment.order_id, course_id: courseId });
+    res.json({ received: true, event, acted: false });
+    return;
+  }
 
-    // The buyer is taken from the order notes we set at creation time, never
-    // from anything the webhook caller could choose.
-    const userId = payment.notes?.user_id;
-    if (!userId || payment.notes?.course_id !== course.id) {
-      logger.warn('payment_webhook_unmatched', { order_id: payment.order_id, course_id: course.id });
-      return res.json({ received: true, status: payment.status, acted: false });
-    }
+  const course = await queryOne<CourseRow>('SELECT id, price, status, title FROM courses WHERE id = $1', [courseId]);
+  if (!course) throw notFound('Course not found');
 
-    const result = await confirmPayment({
-      orderId: payment.order_id,
-      paymentId: payment.id,
-      userId,
-      course,
-    });
+  // The order must be one we created for this learner and course.
+  const owned = await queryOne(
+    'SELECT id FROM payments WHERE razorpay_order_id = $1 AND user_id = $2 AND course_id = $3',
+    [payment.order_id, userId, course.id],
+  );
+  if (!owned) {
+    logger.warn('payment_webhook_unknown_order', { order_id: payment.order_id });
+    res.json({ received: true, event, acted: false });
+    return;
+  }
 
-    res.json({ received: true, status: 'captured', ...result });
-  }),
-);
+  const result = await confirmPayment({ orderId: payment.order_id, paymentId: payment.id, userId, course });
+  res.json({ received: true, event, acted: true, ...result });
+}
+
+paymentsRouter.post('/payments/webhook', wrap((req, res) => handleWebhook(req, res)));
+paymentsRouter.post('/courses/:id/payment/webhook', wrap((req, res) => handleWebhook(req, res, req.params.id)));
 
 // --- GET /courses/:id/payment/status -------------------------------------
 
