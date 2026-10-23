@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq';
+import { JobsOptions, Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
@@ -21,6 +21,32 @@ import type { EmailCta, EmailKind } from '../services/email';
 // disables the queue. tests/queues.test.ts guards this.
 export const queueConnection = () =>
   new IORedis(env.redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false });
+
+/**
+ * Add a job whose id deduplicates it — at most one run per key is queued or
+ * running at a time.
+ *
+ * BullMQ silently ignores `add` when a job with the same id still exists,
+ * *including finished ones kept by removeOnComplete/removeOnFail*. Without
+ * clearing those, a key could run once and then never again: a learner's
+ * topic mastery stopped updating after its first recompute. Finished jobs
+ * are removed first; a waiting, delayed or active one is left alone, which
+ * is the deduplication we want.
+ */
+async function addDeduped(
+  queue: Queue,
+  name: string,
+  data: unknown,
+  opts: JobsOptions & { jobId: string },
+): Promise<void> {
+  const existing = await queue.getJob(opts.jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'completed' || state === 'failed') await existing.remove();
+    else return;
+  }
+  await queue.add(name, data, opts);
+}
 
 let certificateQueue: Queue | null = null;
 let streakQueue: Queue | null = null;
@@ -96,7 +122,7 @@ export async function queueMasteryRecompute(payload: {
   courseId: string;
 }): Promise<void> {
   try {
-    await getMasteryQueue().add('recompute', payload, {
+    await addDeduped(getMasteryQueue(), 'recompute', payload, {
       jobId: `mastery-${payload.userId}-${payload.courseId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2_000 },
@@ -127,7 +153,7 @@ export async function queueTranscription(payload: {
   mediaUrl?: string;
 }): Promise<void> {
   try {
-    await getTranscriptionQueue().add('transcribe', payload, {
+    await addDeduped(getTranscriptionQueue(), 'transcribe', payload, {
       jobId: `transcribe-${payload.lectureId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5_000 },
@@ -156,7 +182,7 @@ function getIngestionQueue(): Queue {
  */
 export async function queueIngestion(payload: { lectureId: string }): Promise<void> {
   try {
-    await getIngestionQueue().add('ingest', payload, {
+    await addDeduped(getIngestionQueue(), 'ingest', payload, {
       jobId: `ingest-${payload.lectureId}`,
       attempts: 5,
       backoff: { type: 'exponential', delay: 5_000 },
@@ -182,7 +208,7 @@ function getVideoQueue(): Queue {
  */
 export async function queueVideo(payload: { lectureId: string }): Promise<void> {
   try {
-    await getVideoQueue().add('transcode', payload, {
+    await addDeduped(getVideoQueue(), 'transcode', payload, {
       jobId: `video-${payload.lectureId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 30_000 },
