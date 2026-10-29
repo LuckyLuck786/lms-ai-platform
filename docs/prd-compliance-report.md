@@ -1,6 +1,6 @@
 # Vertexon LMS-AI — PRD v1.0 Compliance Report
 
-**Date:** 24 October 2026 · **Release verified:** `v1.0.0` (commit `30ab2f0`, running in staging and production)
+**Date:** 30 October 2026 · **Release verified:** `v1.1.0` (commit `d68177a`, running in staging and production)
 **Supersedes:** the 23 October edition of this report, [`prd-compliance-audit.md`](prd-compliance-audit.md),
 and the status tables in [`backend-gap-analysis.md`](backend-gap-analysis.md).
 
@@ -26,18 +26,18 @@ Remaining items are either outside PRD scope or are product metrics that need re
 
 ## How this was verified
 
-Each line below was checked on 23–24 October 2026 against code or a running system. Nothing is
+Each line below was checked between 23 and 30 October 2026 against code or a running system. Nothing is
 carried over from earlier documents.
 
 | Method | Covers | Result |
 |---|---|---|
 | `scripts/verify_prd.py` against **staging** (real Cloud Run, Cloud SQL, Memorystore, Groq/Gemini, Gmail SMTP) | All 29 functional requirements + error format, RBAC, rate limits | **35 / 35** |
 | The same script against a full local stack | same | **35 / 35** |
-| Playwright + axe-core, 11 screens × light/dark | WCAG 2.1 A/AA | **22 / 22, zero violations** |
-| Playwright end-to-end (real browser, real API) | catalog, logins, route guard, account page, verify-email page | **8 / 8** |
-| Backend unit tests | | 130 pass |
-| Backend integration tests (real Postgres + Redis from empty) | migrations, auth, accounts, email verification, pagination, rate limits, encryption, indexes | 23 pass |
-| AI service tests | | 70 pass, 1 skipped |
+| Playwright + axe-core, 14 screens × light/dark | WCAG 2.1 A/AA | **28 / 28, zero violations** |
+| Playwright end-to-end (real browser, real API) | catalog, logins, route guard, account, password reset, flashcards, live classes | **14 / 14** |
+| Backend unit tests | | 151 pass |
+| Backend integration tests (real Postgres + Redis from empty) | migrations, auth, accounts, email verification, pagination, rate limits, encryption, indexes, v1.1.0 features | 45 pass |
+| AI service tests | | 76 pass |
 | Frontend tests | | 53 pass |
 | Live production checks | migrations, encryption, all 8 lectures streaming, demo accounts verified | all pass |
 | Real-browser playback (WebKit) on staging | HLS from CDN | plays; 360p rendition; segments from CDN |
