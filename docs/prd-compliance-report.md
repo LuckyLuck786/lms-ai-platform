@@ -50,8 +50,8 @@ failing check blocks the staging deploy — it did once on 23 October, and that 
 ## §3 Scope
 
 All 14 in-scope items are delivered. On the §3.2 out-of-scope list, only **payments** was built
-(Razorpay order, verify, webhook, 402 gating). It has no live gateway keys, so it has never taken a
-real payment.
+(Razorpay Standard Checkout: order, verify, webhook, 402 gating). It runs with Razorpay **test-mode**
+keys, so test payments work end to end but it has never taken a real payment.
 
 ## §5 Functional requirements — 29 / 29
 
@@ -119,6 +119,7 @@ see an AI quiz only after the instructor approves it.
 ## v1.1.0 — features beyond the PRD (24 October 2026)
 
 Re-verified first: `verify_prd.py` still passes **35/35** on staging, so all of PRD v1.0 remains met.
+Re-run on 30 October 2026: **35/35** again; all four services healthy, no server errors since the release.
 Added afterwards:
 
 | Feature | Where | Verified |
@@ -158,8 +159,8 @@ lectures that do not cover the question or invents lecture titles; and an admin 
 |---|---|
 | §2.3 product KPIs (completion +25 %, retention ≥ 40 %, quiz usability ≥ 85 %) | Need real learners over time; the analytics to measure them exist |
 | 99.5 % availability figure | Monitoring is on; there is not yet enough uptime history |
-| §3.2 out-of-scope items (live classes, mobile apps, plagiarism detection…) | Out of scope by design |
-| Live payments | Built, but no Razorpay keys |
+| §3.2 out-of-scope items (mobile apps, plagiarism detection…) | Out of scope by design; live classes were added in v1.1.0 anyway |
+| Live payments | Works with Razorpay test-mode keys; real payments need live keys and KYC |
 | Accessibility beyond automated checks | axe catches roughly half of WCAG issues; there has been no manual screen-reader pass |
 
 ## Reproducing
