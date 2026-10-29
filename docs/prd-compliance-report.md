@@ -10,7 +10,7 @@ and the status tables in [`backend-gap-analysis.md`](backend-gap-analysis.md).
 
 The three gaps in the 23 October edition are closed:
 
-- **WCAG 2.1 AA** — zero automated violations on 11 screens, in light and dark theme.
+- **WCAG 2.1 AA** — zero automated violations on 14 screens, in light and dark theme.
 - **Video delivery** — HLS adaptive streaming through Cloud CDN.
 - **Release process** — a staging environment, with a tagged-release promotion to production.
 
